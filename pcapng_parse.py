@@ -67,15 +67,33 @@ USB_FUNC_GET_STATUS       = 0x0013
 USB_FUNC_CLASS_DEV        = 0x001a
 USB_FUNC_CTRL_TRANS_EX    = 0x0032
 
-USB_ENDPOINT_ATTR_CTRL    = 0
-USB_ENDPOINT_ATTR_ISOC    = 1
-USB_ENDPOINT_ATTR_BULK    = 2
-USB_ENDPOINT_ATTR_INTR    = 3
+USB_ENDPOINT_ATTR_MASK    = 0x03
+USB_ENDPOINT_ATTR_CTRL    = 0x00
+USB_ENDPOINT_ATTR_ISOC    = 0x01
+USB_ENDPOINT_ATTR_BULK    = 0x02
+USB_ENDPOINT_ATTR_INTR    = 0x03
 
 
 #####################################################
 # USBのCTRL転送に関する定義
 #####################################################
+USB_CTRL_REQTYP_BIT_DIRRECTION        = 0x80
+USB_CTRL_REQTYP_BIT_HOST_TO_DEVICE    = 0x00
+USB_CTRL_REQTYP_BIT_DEVICE_TO_HOST    = 0x80
+
+USB_CTRL_REQTYP_BIT_REQ_TYPE          = 0x60
+USB_CTRL_REQTYP_BIT_STANDARD_REQ      = 0x00
+USB_CTRL_REQTYP_BIT_CLASS_REQ         = 0x20
+USB_CTRL_REQTYP_BIT_VENDOR_REQ        = 0x40
+USB_CTRL_REQTYP_BIT_RESERVED_REQ      = 0x60
+
+USB_CTRL_REQTYP_BIT_REQ_TGT           = 0x1F
+USB_CTRL_REQTYP_BIT_REQ_TGT_DEVICE    = 0x00
+USB_CTRL_REQTYP_BIT_REQ_TGT_INTERFACE = 0x01
+USB_CTRL_REQTYP_BIT_REQ_TGT_ENDPOINT  = 0x02
+USB_CTRL_REQTYP_BIT_REQ_TGT_OTHER     = 0x03
+
+
 USB_CTRL_REQ_GET_ST   = 0
 USB_CTRL_REQ_CLR_FT   = 1
 USB_CTRL_REQ_SET_FT   = 3
@@ -97,16 +115,63 @@ USB_DESC_TYPE_DEVICE_Q    = 6
 USB_DESC_TYPE_OTHER_SPD   = 7
 USB_DESC_TYPE_INTERFACE_P = 8
 
-USB_INTERFACE_CLASS_AUDIO               = 1
-USB_INTERFACE_CLASS_CDC                 = 2
-USB_INTERFACE_CLASS_HID                 = 3
-USB_INTERFACE_CLASS_IMAGE               = 6
-USB_INTERFACE_CLASS_MSC                 = 8
-USB_INTERFACE_CLASS_HUB                 = 9
+USB_INTERFACE_CLASS_AUDIO               = 0x01
+USB_INTERFACE_CLASS_CDC                 = 0x02
+USB_INTERFACE_CLASS_HID                 = 0x03
+USB_INTERFACE_CLASS_IMAGE               = 0x06
+USB_INTERFACE_CLASS_PRINTER             = 0x07
+USB_INTERFACE_CLASS_MSC                 = 0x08
+USB_INTERFACE_CLASS_HUB                 = 0x09
+USB_INTERFACE_CLASS_UVC                 = 0x0E
 USB_INTERFACE_CLASS_WIRELESS_CONTROLLER = 0xE0
 USB_INTERFACE_CLASS_VENDOR_SPECIFIC     = 0xFF
 
 MIN_ENDPOINT_DESC_SIZE    = 7
+
+#####################################################
+# MTPに関する定義
+#####################################################
+MTP_CONTAINER_TYPE_UNKNOWN         = 0x0000
+MTP_CONTAINER_TYPE_COMMAND         = 0x0001
+MTP_CONTAINER_TYPE_DATA            = 0x0002
+MTP_CONTAINER_TYPE_RESPONSE        = 0x0003
+MTP_CONTAINER_TYPE_EVENT           = 0x0004
+
+MTP_RES_OK                         = 0x2001
+MTP_OP_NOT_SUPPORTED               = 0x2005
+
+
+MTP_OPC_GET_DEVICE_INFO            = 0x1001
+MTP_OPC_OPEN_SESSION               = 0x1002
+MTP_OPC_CLOSE_SESSION              = 0x1003
+MTP_OPC_GET_STORAGE_IDS            = 0x1004
+MTP_OPC_GET_STORAGE_INFO           = 0x1005
+MTP_OPC_GET_NUM_OBJECTS            = 0x1006
+MTP_OPC_GET_OBJECT_HANDLES         = 0x1007
+MTP_OPC_GET_OBJECT_INFO            = 0x1008
+MTP_OPC_GET_OBJECT                 = 0x1009
+MTP_OPC_GET_DEVICE_PROP_DESCS      = 0x1014
+MTP_OPC_GET_PARTIAL_OBJECT         = 0x101B
+MTP_OPC_GET_OBJECT_PROPS_SUPPORTED = 0x9801
+MTP_OPC_GET_OBJECT_PROPS_DESCS     = 0x9802
+MTP_OPC_GET_OBJECT_PROP_LIST       = 0x9805
+
+OPC_TABLE = {
+    MTP_OPC_GET_DEVICE_INFO            : "GetDeviceInfo",
+    MTP_OPC_OPEN_SESSION               : "OpenSession",
+    MTP_OPC_CLOSE_SESSION              : "CloseSession",
+    MTP_OPC_GET_STORAGE_IDS            : "GetStorageIDs",
+    MTP_OPC_GET_STORAGE_INFO           : "GetStorageInfo",
+    MTP_OPC_GET_NUM_OBJECTS            : "GetNumObjects",
+    MTP_OPC_GET_OBJECT_HANDLES         : "GetObjectHandles",
+    MTP_OPC_GET_OBJECT_INFO            : "GetObjectInfo",
+    MTP_OPC_GET_OBJECT                 : "GetObject",
+    MTP_OPC_GET_DEVICE_PROP_DESCS      : "GetDevicePropDescs",
+    MTP_OPC_GET_PARTIAL_OBJECT         : "GetPartialObject",
+    MTP_OPC_GET_OBJECT_PROPS_SUPPORTED : "GetObjectPropsSupported",
+    MTP_OPC_GET_OBJECT_PROPS_DESCS     : "GetObjectPropsDescs",
+    MTP_OPC_GET_OBJECT_PROP_LIST       : "GetObjectPropList"
+}
 
 
 EOF                       = -1
@@ -116,6 +181,44 @@ g_sections                = []
 
 
 
+#####################################################
+# USB MTP Interface
+#####################################################
+class cMTP_Object:
+    def __init__(self, parent):
+        self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
+        self.format_code            = 0
+        self.props_supported        = []
+
+
+#####################################################
+# USB MTP Interface
+#####################################################
+class cUSBInterfaceMTP:
+    def __init__(self, parent):
+        self.parent                 = parent           #cUSBInterfaceクラスへの参照
+        self.last_opc               = 0
+        self.last_param             = 0
+        self.standard_ver           = 0
+        self.mtp_vendor_ex_id       = 0
+        self.mtp_version            = 0
+        self.mtp_extensions         = 0
+        self.functional_mode        = 0
+        self.operations_supported   = []
+        self.events_supported       = []
+        self.device_props_supported = []
+        self.capture_formats        = []
+        self.playback_formats       = []
+        self.manufacturer           = ""
+        self.model                  = ""
+        self.device_ver             = ""
+        self.serial_num             = ""
+        self.objects                = []
+
+
+#####################################################
+# USB Endpoint
+#####################################################
 class cUSBEndpoint:
     def __init__(self, parent, EndpointAddress):
         self.parent             = parent           #cUSBInterfaceクラスへの参照
@@ -125,6 +228,9 @@ class cUSBEndpoint:
         self.Interval           = 0
 
 
+#####################################################
+# USB Interface
+#####################################################
 class cUSBInterface:
     def __init__(self, parent, InterfaceNumber):
         self.parent             = parent           #cUSBConfigクラスへの参照
@@ -134,6 +240,7 @@ class cUSBInterface:
         self.InterfaceSubClass  = 0
         self.InterfaceProtocol  = 0
         self.Endpoints          = []
+        self.Child              = None
 
     def get_usb_endpoint(self, EndpointAddress):
         for endpoint in self.Endpoints:
@@ -144,7 +251,22 @@ class cUSBInterface:
         self.Endpoints.append(endpoint)
         return endpoint
 
+    def is_owned_endpoint(self, EndpointAddress):
+        for endpoint in self.Endpoints:
+            if (endpoint.EndpointAddress == EndpointAddress):
+                return True
 
+        return False
+
+    def create_child(self):
+        if (USB_INTERFACE_CLASS_IMAGE == self.InterfaceClass):
+            self.child = cUSBInterfaceMTP(self)
+
+
+
+#####################################################
+# USB Config
+#####################################################
 class cUSBConfig:
     def __init__(self, parent, ConfigurationValue):
         self.parent             = parent           #cUSBDeviceクラスへの参照
@@ -163,7 +285,16 @@ class cUSBConfig:
         self.Interfaces.append(interface)
         return interface
 
+    def get_interface_by_endpoint(self, Endpoint):
+        for interface in self.Interfaces:
+            if (interface.is_owned_endpoint(Endpoint)):
+                return interface
 
+        return None
+
+#####################################################
+# USB Device
+#####################################################
 class cUSBDevice:
     def __init__(self, bus_id, address):
         self.bus_id            = bus_id
@@ -175,6 +306,7 @@ class cUSBDevice:
         self.pid               = 0
         self.packets           = []
         self.configs           = []
+        self.set_config        = -1
 
     def add_packet(self, packet):
         self.packets.append(packet)
@@ -195,6 +327,147 @@ class cUSBDevice:
         self.configs.append(config)
         return config
 
+    def get_interface_by_endpoint(self, Endpoint):
+        if (self.set_config == -1):
+            return None
+
+        config = self.get_usb_config(self.set_config)
+        return config.get_interface_by_endpoint(Endpoint)
+
+
+#####################################################
+# USB MTP Generic Container Dataset
+#####################################################
+class cUSBContainer:
+    def __init__(self, parent):
+        self.parent        = parent           #cUSBPcapHeaderクラスへの参照
+        self.length        = 0
+        self.type          = 0
+        self.code          = 0
+        self.transactionID = 0
+
+
+    def read_get_device_props_descs_data(self, usb, interface):
+        return
+
+    def read_get_object_props_supported_data(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        object = cMTP_Object(mtp)
+        object.format_code = mtp.last_param
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            prop = parent.read_header_element(2)
+            object.props_supported.append(prop)
+            list_size -= 1
+            print("MTP            ObjectProps supported : 0x%04x" % prop)
+
+        mtp.objects.append(object)
+        return
+
+    def read_get_device_info_data(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+
+        mtp.standard_ver     = parent.read_header_element(2)
+        mtp.mtp_vendor_ex_id = parent.read_header_element(4)
+        mtp.mtp_version      = parent.read_header_element(2)
+        mtp.mtp_extensions   = parent.read_header_string()
+        mtp.functional_mode  = parent.read_header_element(2)
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            opc = parent.read_header_element(2)
+            mtp.operations_supported.append(opc)
+            list_size -= 1
+            print("MTP            OPC supported : 0x%04x" % opc)
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            event = parent.read_header_element(2)
+            mtp.events_supported.append(event)
+            list_size -= 1
+            print("MTP            EVENT supported : 0x%04x" % event)
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            prop = parent.read_header_element(2)
+            mtp.device_props_supported.append(prop)
+            list_size -= 1
+            print("MTP            DEVICE PROPS supported : 0x%04x" % prop)
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            format = parent.read_header_element(2)
+            mtp.capture_formats.append(format)
+            list_size -= 1
+            print("MTP            Capture Format : 0x%04x" % format)
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            format = parent.read_header_element(2)
+            mtp.playback_formats.append(format)
+            list_size -= 1
+            print("MTP            PlayBack Format : 0x%04x" % format)
+
+
+        mtp.manufacturer   = parent.read_header_string()
+        mtp.model          = parent.read_header_string()
+        mtp.device_ver     = parent.read_header_string()
+        mtp.serial_num     = parent.read_header_string()
+        print("MTP            Manufacturer   : %s" % mtp.manufacturer)
+        print("MTP            Model          : %s" % mtp.model)
+        print("MTP            Device Version : %s" % mtp.device_ver)
+        print("MTP            Serial Number  : %s" % mtp.serial_num)
+        return
+
+
+    def read_mtp_bulk_out(self, usb, interface):
+        parent = self.parent
+
+        if (OPC_TABLE.get(self.code)):
+            opc = OPC_TABLE[self.code]
+            if (MTP_OPC_OPEN_SESSION == self.code):
+                session_id = parent.read_header_element(4)
+                print("MTP[0x%08x]OpenSession(0x%04x), SessionID : 0x%08x" % (self.transactionID, self.code, session_id))
+            elif (MTP_OPC_GET_DEVICE_INFO == self.code):
+                print("MTP[0x%08x]GetDeviceInfo(0x%04x)" % (self.transactionID, self.code))
+            elif (MTP_OPC_GET_DEVICE_PROP_DESCS == self.code):
+                device_prop_code = parent.read_header_element(4)
+                interface.child.last_param = device_prop_code
+                print("MTP[0x%08x]GetDevicePropDescs(0x%04x), DevicePropCode : 0x%04x" % (self.transactionID, self.code, device_prop_code))
+            elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
+                object_fc = parent.read_header_element(4)
+                interface.child.last_param = object_fc
+                print("MTP[0x%08x]GetObjectPropsSupported(0x%04x), ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_fc))
+            else:
+                print("BULK OUT to Imaging, packet_len : %d, %s(0x%04x)" % (parent.packet_len, opc, self.code))
+            
+        else:
+            print("BULK OUT to Imaging, packet_len : %d, UNKNOWN OPC(0x%04x)" % (parent.packet_len, self.code))
+        return
+
+    def read_mtp_bulk_in(self, usb, interface):
+        parent = self.parent
+
+        if (MTP_RES_OK == self.code):
+            print("MTP[0x%08x]Response OK(0x%04x)" % (self.transactionID, self.code))
+        elif (MTP_OPC_GET_DEVICE_INFO == self.code):
+            print("MTP[0x%08x]GetDeviceInfo(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_device_info_data(usb, interface)
+        elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
+            print("MTP[0x%08x]GetObjectPropsSupported(0x%04x) data for Format:0x%04x" % (self.transactionID, self.code, interface.child.last_param))
+            self.read_get_object_props_supported_data(usb, interface)
+        elif (MTP_OPC_GET_DEVICE_PROP_DESCS == self.code):
+            print("MTP[0x%08x]GetDevicePropDescs(0x%04x) data for DevicePropCode : 0x%04x" % (self.transactionID, self.code, interface.child.last_param))
+            self.read_get_device_props_descs_data(usb, interface)
+        else:
+            print("BULK IN from Imaging, packet_len : %d" % parent.packet_len)
+        return
+
+
+
 #####################################################
 # USB Pcap packet
 #####################################################
@@ -212,6 +485,7 @@ class cUSBPcapHeader:
         self.packet_len   = 0
         self.parent       = parent           #cEPBクラスへの参照
         self.bytes_read   = 0
+        self.container    = None
 
     def read_header_element(self, size):
         parent = self.parent
@@ -221,6 +495,31 @@ class cUSBPcapHeader:
 #       print("tmp_data[%02d:%02d] : " % (self.bytes_read, size), tmp_data)
         self.bytes_read += size
         return int.from_bytes(tmp_data, byteorder=grandpa.byte_order)
+
+    def read_header_string(self):
+        string = ""
+
+        parent = self.parent
+        grandpa = parent.parent
+
+        tmp_data = grandpa.file.read(1)
+        self.bytes_read += 1
+        string_length = int.from_bytes(tmp_data, byteorder=grandpa.byte_order)
+        while(string_length > 0):
+            tmp_data = grandpa.file.read(2)
+            self.bytes_read += 2
+            code = int.from_bytes(tmp_data, byteorder=grandpa.byte_order)
+            if (0x0000 == code):
+                break;
+
+            if (0x0100 <= code):
+                string += "?"
+            else:
+                string += chr(code)
+
+            string_length -= 1
+
+        return string
 
 
     def read_desc_header(self, last):
@@ -292,7 +591,7 @@ class cUSBPcapHeader:
                     interface.InterfaceClass    = InterfaceClass
                     interface.InterfaceSubClass = InterfaceSubClass
                     interface.InterfaceProtocol = InterfaceProtocol
-
+                    interface.create_child()
 
                 elif (USB_DESC_TYPE_ENDPOINT == DescType):
                     EndpointAddress   = self.read_header_element(1)
@@ -331,6 +630,58 @@ class cUSBPcapHeader:
             self.read_config_desc(remain, usb)
         return
 
+    def read_mtp_bulk_out(self, usb, interface):
+        if (self.packet_len > 0):
+            container                = cUSBContainer(self)
+            container.length         = self.read_header_element(4)
+            container.type           = self.read_header_element(2)
+            container.code           = self.read_header_element(2)
+            container.transactionID  = self.read_header_element(4)
+            interface.child.last_opc = container.code
+            self.container           = container
+            container.read_mtp_bulk_out(usb, interface)
+        else:
+            print("BULK OUT to Imaging without data!")
+
+
+    def read_mtp_bulk_in(self, usb, interface):
+        if (self.packet_len > 0):
+            container               = cUSBContainer(self)
+            container.length        = self.read_header_element(4)
+            container.type          = self.read_header_element(2)
+            container.code          = self.read_header_element(2)
+            container.transactionID = self.read_header_element(4)
+            self.container = container
+            container.read_mtp_bulk_in(usb, interface)
+        else:
+            print("BULK IN from Imaging without data!")
+
+    def read_bulk_out_data(self, usb):
+        interface = usb.get_interface_by_endpoint(self.endpoint)
+        if (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
+            self.read_mtp_bulk_out(usb, interface)
+        return
+
+    def read_bulk_in_data(self, usb):
+        interface = usb.get_interface_by_endpoint(self.endpoint)
+        if (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
+            self.read_mtp_bulk_in(usb, interface)
+        return
+
+    def is_standard_get_request_type(self, mRequestType):
+        if ((USB_CTRL_REQTYP_BIT_DIRRECTION & mRequestType) == USB_CTRL_REQTYP_BIT_DEVICE_TO_HOST):
+            if ((USB_CTRL_REQTYP_BIT_REQ_TYPE & mRequestType) == USB_CTRL_REQTYP_BIT_STANDARD_REQ):
+                return True
+
+        return False
+
+    def is_standard_set_request_type(self, mRequestType):
+        if ((USB_CTRL_REQTYP_BIT_DIRRECTION & mRequestType) == USB_CTRL_REQTYP_BIT_HOST_TO_DEVICE):
+            if ((USB_CTRL_REQTYP_BIT_REQ_TYPE & mRequestType) == USB_CTRL_REQTYP_BIT_STANDARD_REQ):
+                return True
+
+        return False
+
 
     def read_packet(self, remain):
         parent = self.parent
@@ -358,16 +709,37 @@ class cUSBPcapHeader:
                 self.mRequestType = self.read_header_element(USBPCAP_CTRL_BMREQ_SIZE)
                 self.Request      = self.read_header_element(USBPCAP_CTRL_REQ_SIZE)
 
-                if (USB_CTRL_REQ_GET_DESC == self.Request):
-                    self.DescIndex = self.read_header_element(1)
-                    self.DescType  = self.read_header_element(1)
-                elif (USB_CTRL_REQ_SET_CFG == self.Request):
-                    self.ConfigValue = self.read_header_element(1)
+                if (self.is_standard_get_request_type(self.mRequestType)):
+                    if (USB_CTRL_REQ_GET_DESC == self.Request):
+                        self.DescIndex = self.read_header_element(1)
+                        self.DescType  = self.read_header_element(1)
+                    if (USB_CTRL_REQ_GET_ST == self.Request):
+                        self.Value  = self.read_header_element(2)
+                        self.Index  = self.read_header_element(2)
+                        self.Length = self.read_header_element(2)
+
+                elif (self.is_standard_set_request_type(self.mRequestType)):
+                    if (USB_CTRL_REQ_SET_CFG == self.Request):
+                        self.ConfigValue = self.read_header_element(1)
+                        usb.set_config = self.ConfigValue
             else:
                 if (last.trans_type == USB_TRANS_TYPE_CTRL):
-                    if (USB_CTRL_REQ_GET_DESC == last.Request):
-                        self.read_get_desc_res(remain, usb, last)
+                    if (last.is_standard_get_request_type(last.mRequestType)):
+                        if (USB_CTRL_REQ_GET_DESC == last.Request):
+                            self.read_get_desc_res(remain, usb, last)
+                        elif (USB_CTRL_REQ_GET_ST == last.Request):
+                            self.Status  = self.read_header_element(2)
+        elif (self.trans_type == USB_TRANS_TYPE_BULK):
+            if (self.irp_info == 0):
+                self.read_bulk_out_data(usb)
+            else:
+                self.read_bulk_in_data(usb)
 
+
+
+        if (remain < self.bytes_read):
+            print("Invalid block read @0x%08x" % self.parent.parent.file.tell())
+            sys.exit("error")
 
         self.data = self.parent.parent.file.read(remain - self.bytes_read)
 
@@ -376,7 +748,9 @@ class cUSBPcapHeader:
 
     def disp_packet(self):
         parent = self.parent
-        print("read EPB(USBPcap) block! length : %3d, Interface : %d, TS[%08x-%08x]" % (parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l))
+        ts_l = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) % 1000000
+        ts_h = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) / 1000000
+        print("read EPB(USBPcap) @ 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%d.%06d)" % (parent.position, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, ts_h, ts_l))
 
         addr = "[%02x:%02x:%02x]" % (self.bus_id, self.dev_addr, self.endpoint)
         extra = ""
@@ -446,12 +820,13 @@ class cSHB:
 # Interface Description Block
 #####################################################
 class cIDB:
-    def __init__(self, parent, length):
+    def __init__(self, parent, length, position):
         self.block_type  = BLOCK_TYPE_IDB
         self.total_len   = length
         self.link_type   = 0
         self.snap_len    = 0
         self.parent      = parent           #cSectionクラスへの参照
+        self.position     = position
 
     def read_block(self):
         data_lt      = self.parent.file.read(IDB_LINKTYPE_SIZE)
@@ -472,7 +847,7 @@ class cIDB:
 # Enhanced Packet Block
 #####################################################
 class cEPB:
-    def __init__(self, parent, length):
+    def __init__(self, parent, length, position):
         self.block_type   = BLOCK_TYPE_EPB
         self.total_len    = length
         self.interface_id = 0
@@ -482,6 +857,7 @@ class cEPB:
         self.packet_len   = 0
         self.parent       = parent           #cSectionクラスへの参照
         self.child        = ""
+        self.position     = position
 
     def read_block(self):
         data_iterface = self.parent.file.read(EPB_INTERFACE_ID_SIZE)
@@ -508,6 +884,9 @@ class cEPB:
         # EPBのヘッダ部分と末尾のLength情報を除いて、Packetデータとして読み出すべき長さをremainとして引数に渡す
         self.child.read_packet(self.total_len - EPB_READ_LEN - BLOCK_LEN_SIZE)
 
+        if (self.parent.first_ts == 0):
+            self.parent.first_ts = (self.time_stamp_h << 32) + self.time_stamp_l
+
         return
 
     def disp_block(self):
@@ -518,17 +897,18 @@ class cEPB:
 # Any other blocks
 #####################################################
 class cBlock:
-    def __init__(self, parent, type, length):
+    def __init__(self, parent, type, length, position):
         self.block_type   = type
         self.total_len    = length
         self.parent       = parent           #cSectionクラスへの参照
+        self.position     = position
 
     def read_block(self):
         data_waste = self.parent.file.read(self.total_len - BLOCK_TYPE_SIZE - BLOCK_LEN_SIZE - BLOCK_LEN_SIZE)
         return
 
     def disp_block(self):
-        print("read block type : 0x%08x, length : %d" % (self.block_type, self.total_len))
+        print("read block @ 0x%08x, type : 0x%08x, length : %d" % (self.position, self.block_type, self.total_len))
 
 
 #####################################################
@@ -542,6 +922,7 @@ class cSection:
         self.blocks      = []
         self.byte_order  = ''
         self.usb_devices = []
+        self.first_ts    = 0
 
     def read_shb(self):
         self.shb = cSHB(self)
@@ -594,7 +975,7 @@ class cSection:
         return block_type
 
 
-    def read_next_block(self, type):
+    def read_next_block(self, type, position):
         data_len = self.file.read(BLOCK_LEN_SIZE)
         if (len(data_len) !=  BLOCK_LEN_SIZE):
             print("Invalid block structure!")
@@ -603,12 +984,12 @@ class cSection:
         total_len  = int.from_bytes(data_len, byteorder=self.byte_order)
 
         if (BLOCK_TYPE_IDB == type):
-            block = cIDB(self, total_len)
+            block = cIDB(self, total_len, position)
             self.idbs.append(block)
         elif (BLOCK_TYPE_EPB == type):
-            block = cEPB(self, total_len)
+            block = cEPB(self, total_len, position)
         else:
-            block = cBlock(self, type, total_len)
+            block = cBlock(self, type, total_len, position)
 
         block.read_block()
 
@@ -651,14 +1032,16 @@ def parse_file(file_path):
             section.read_shb()
             g_sections.append(section)
             while (True):
+                position = f.tell()
                 block_type = section.read_next_block_type()
                 if (EOF == block_type):
                     f.close()
                     return
                 elif (BLOCK_TYPE_SHB == block_type):
+                    print("new SHB @ 0x%08x" % position)
                     break
                 else:
-                    section.read_next_block(block_type)
+                    section.read_next_block(block_type, position)
 
     else:
        print("Invalid first block type! block type : 0x%08x" % block_type)
@@ -678,14 +1061,14 @@ def check_usb_devices(section):
             for interface in config.Interfaces:
                 print("        interface[%d] num endpoint is %d, Class:0x%02x" % (interface.InterfaceNumber, interface.NumEndpoints, interface.InterfaceClass))
                 for endpoint in interface.Endpoints:
-                    if (USB_ENDPOINT_ATTR_BULK == endpoint.mAttributes):
+                    if (USB_ENDPOINT_ATTR_BULK == (USB_ENDPOINT_ATTR_MASK & endpoint.mAttributes)):
                         if (endpoint.EndpointAddress & 0x80):
                             print("            BULK IN  endpoint[0x%02x] Attr:0x%x, MaxPacketSize:0x%x, Interval:%d" % (endpoint.EndpointAddress, endpoint.mAttributes, endpoint.MaxPacketSize, endpoint.Interval))
                         else:
                             print("            BULK OUT endpoint[0x%02x] Attr:0x%x, MaxPacketSize:0x%x, Interval:%d" % (endpoint.EndpointAddress, endpoint.mAttributes, endpoint.MaxPacketSize, endpoint.Interval))
-                    elif (USB_ENDPOINT_ATTR_INTR == endpoint.mAttributes):
+                    elif (USB_ENDPOINT_ATTR_INTR == (USB_ENDPOINT_ATTR_MASK & endpoint.mAttributes)):
                         print("            INTR IN  endpoint[0x%02x] Attr:0x%x, MaxPacketSize:0x%x, Interval:%d" % (endpoint.EndpointAddress, endpoint.mAttributes, endpoint.MaxPacketSize, endpoint.Interval))
-                    elif (USB_ENDPOINT_ATTR_ISOC == endpoint.mAttributes):
+                    elif (USB_ENDPOINT_ATTR_ISOC == (USB_ENDPOINT_ATTR_MASK & endpoint.mAttributes)):
                         if (endpoint.EndpointAddress & 0x80):
                             print("            ISOC IN  endpoint[0x%02x] Attr:0x%x, MaxPacketSize:0x%x, Interval:%d" % (endpoint.EndpointAddress, endpoint.mAttributes, endpoint.MaxPacketSize, endpoint.Interval))
                         else:
