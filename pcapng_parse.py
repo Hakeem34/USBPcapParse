@@ -150,10 +150,10 @@ MTP_OPC_GET_NUM_OBJECTS            = 0x1006
 MTP_OPC_GET_OBJECT_HANDLES         = 0x1007
 MTP_OPC_GET_OBJECT_INFO            = 0x1008
 MTP_OPC_GET_OBJECT                 = 0x1009
-MTP_OPC_GET_DEVICE_PROP_DESCS      = 0x1014
+MTP_OPC_GET_DEVICE_PROP_DESC       = 0x1014
 MTP_OPC_GET_PARTIAL_OBJECT         = 0x101B
 MTP_OPC_GET_OBJECT_PROPS_SUPPORTED = 0x9801
-MTP_OPC_GET_OBJECT_PROPS_DESCS     = 0x9802
+MTP_OPC_GET_OBJECT_PROPS_DESC      = 0x9802
 MTP_OPC_GET_OBJECT_PROP_LIST       = 0x9805
 
 OPC_TABLE = {
@@ -166,10 +166,10 @@ OPC_TABLE = {
     MTP_OPC_GET_OBJECT_HANDLES         : "GetObjectHandles",
     MTP_OPC_GET_OBJECT_INFO            : "GetObjectInfo",
     MTP_OPC_GET_OBJECT                 : "GetObject",
-    MTP_OPC_GET_DEVICE_PROP_DESCS      : "GetDevicePropDescs",
+    MTP_OPC_GET_DEVICE_PROP_DESC       : "GetDevicePropDesc",
     MTP_OPC_GET_PARTIAL_OBJECT         : "GetPartialObject",
     MTP_OPC_GET_OBJECT_PROPS_SUPPORTED : "GetObjectPropsSupported",
-    MTP_OPC_GET_OBJECT_PROPS_DESCS     : "GetObjectPropsDescs",
+    MTP_OPC_GET_OBJECT_PROPS_DESC      : "GetObjectPropsDesc",
     MTP_OPC_GET_OBJECT_PROP_LIST       : "GetObjectPropList"
 }
 
@@ -182,13 +182,57 @@ g_sections                = []
 
 
 #####################################################
-# USB MTP Interface
+# USB MTP Object
 #####################################################
 class cMTP_Object:
     def __init__(self, parent):
         self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
         self.format_code            = 0
         self.props_supported        = []
+
+
+#####################################################
+# USB MTP Object Property
+#####################################################
+class cMTP_Object_Prop:
+    def __init__(self, parent):
+        self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
+        self.prop_code              = 0
+        self.data_type              = 0
+        self.get_set                = 0
+        self.default_val            = ""
+        self.group_code             = 0
+        self.form_flag              = 0
+
+
+#####################################################
+# USB MTP Device Property
+#####################################################
+class cMTP_Device_Prop:
+    def __init__(self, parent):
+        self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
+        self.prop_code              = 0
+        self.data_type              = 0
+        self.get_set                = 0
+        self.factory_default_val    = ""
+        self.current_val            = ""
+        self.form_flag              = 0
+
+
+#####################################################
+# USB MTP Storage
+#####################################################
+class cMTP_Storage:
+    def __init__(self, parent):
+        self.parent                  = parent           #cUSBInterfaceMTPクラスへの参照
+        self.storage_type            = 0
+        self.file_system_type        = 0
+        self.access_capability       = 0
+        self.max_capacity            = 0
+        self.free_space_in_bytes     = 0
+        self.free_space_in_objects   = 0
+        self.storage_description     = 0
+        self.volume_identifier       = 0
 
 
 #####################################################
@@ -214,6 +258,8 @@ class cUSBInterfaceMTP:
         self.device_ver             = ""
         self.serial_num             = ""
         self.objects                = []
+        self.storages               = []
+        self.device_props           = []
 
 
 #####################################################
@@ -347,8 +393,65 @@ class cUSBContainer:
         self.transactionID = 0
 
 
-    def read_get_device_props_descs_data(self, usb, interface):
+    def read_get_device_props_desc_data(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        device_prop                     = cMTP_Device_Prop(mtp)
+        device_prop.prop_code           = parent.read_header_element(2)
+        device_prop.data_type           = parent.read_header_element(2)
+        device_prop.get_set             = parent.read_header_element(2)
+        device_prop.factory_default_val = parent.read_header_string()
+        device_prop.current_val         = parent.read_header_string()
+        device_prop.form_flag           = parent.read_header_element(1)
+        print("MTP            Prop Code           : 0x%04x" % device_prop.prop_code)
+        print("MTP            Data Type           : 0x%04x" % device_prop.data_type)
+        print("MTP            Get/Set             : 0x%02x" % device_prop.get_set)
+        print("MTP            Factory Default Val : %s" % device_prop.factory_default_val)
+        print("MTP            Prop Code           : %s" % device_prop.current_val)
+        print("MTP            Form Flag           : 0x%02x" % device_prop.form_flag)
+        mtp.device_props.append(device_prop)
         return
+
+    def read_get_object_props_desc(self, usb, interface):
+        return
+
+    def read_get_object_handles(self, usb, interface):
+        return
+
+    def read_get_storage_info(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        storage = cMTP_Storage(mtp)
+        storage.storage_type          = parent.read_header_element(2)
+        storage.file_system_type      = parent.read_header_element(2)
+        storage.access_capability     = parent.read_header_element(2)
+        storage.max_capacity          = parent.read_header_element(8)
+        storage.free_space_in_bytes   = parent.read_header_element(8)
+        storage.free_space_in_objects = parent.read_header_element(4)
+        storage.storage_description   = parent.read_header_string()
+        storage.volume_identifier     = parent.read_header_string()
+        mtp.storages.append(storage)
+        print("MTP            Storage Type        : 0x%04x" % storage.storage_type)
+        print("MTP            FileSystem Type     : 0x%04x" % storage.file_system_type)
+        print("MTP            Access Capability   : 0x%04x" % storage.access_capability)
+        print("MTP            Max Capacity        : 0x%x" % storage.max_capacity)
+        print("MTP            Free Space in Bytes : 0x%x" % storage.free_space_in_bytes)
+        print("MTP            Free Space in Objs  : 0x%x" % storage.free_space_in_objects)
+        print("MTP            Storage Description : %s" % storage.storage_description)
+        print("MTP            Volume Identifier   : %s" % storage.volume_identifier)
+        return
+
+    def read_get_storage_ids(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+
+        list_size            = parent.read_header_element(4)
+        while (list_size > 0):
+            storage_id = parent.read_header_element(4)
+            list_size -= 1
+            print("MTP            StorageID : 0x%08x" % storage_id)
+        return
+
 
     def read_get_object_props_supported_data(self, usb, interface):
         parent = self.parent
@@ -433,14 +536,29 @@ class cUSBContainer:
                 print("MTP[0x%08x]OpenSession(0x%04x), SessionID : 0x%08x" % (self.transactionID, self.code, session_id))
             elif (MTP_OPC_GET_DEVICE_INFO == self.code):
                 print("MTP[0x%08x]GetDeviceInfo(0x%04x)" % (self.transactionID, self.code))
-            elif (MTP_OPC_GET_DEVICE_PROP_DESCS == self.code):
+            elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
                 device_prop_code = parent.read_header_element(4)
                 interface.child.last_param = device_prop_code
-                print("MTP[0x%08x]GetDevicePropDescs(0x%04x), DevicePropCode : 0x%04x" % (self.transactionID, self.code, device_prop_code))
+                print("MTP[0x%08x]GetDevicePropDesc(0x%04x), DevicePropCode : 0x%04x" % (self.transactionID, self.code, device_prop_code))
             elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
                 object_fc = parent.read_header_element(4)
                 interface.child.last_param = object_fc
                 print("MTP[0x%08x]GetObjectPropsSupported(0x%04x), ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_fc))
+            elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
+                object_prop_code   = parent.read_header_element(4)
+                object_format_code = parent.read_header_element(4)
+                print("MTP[0x%08x]GetObjectPropsDesc(0x%04x), ObjectPropCode : 0x%04x, ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_prop_code, object_format_code))
+            elif (MTP_OPC_GET_STORAGE_IDS == self.code):
+                print("MTP[0x%08x]GetStorageIDs(0x%04x)" % (self.transactionID, self.code))
+            elif (MTP_OPC_GET_STORAGE_INFO == self.code):
+                storage_id = parent.read_header_element(4)
+                interface.child.last_param = storage_id
+                print("MTP[0x%08x]GetStorageInfo(0x%04x) storage_id : %d" % (self.transactionID, self.code, storage_id))
+            elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
+                storage_id         = parent.read_header_element(4)
+                object_format_code = parent.read_header_element(4)
+                handle_association = parent.read_header_element(4)
+                print("MTP[0x%08x]GetObjectHandles(0x%04x) storage_id : 0x%08x, format_code : 0x%04x, handle_association : 0x%08x" % (self.transactionID, self.code, storage_id, object_format_code, handle_association))
             else:
                 print("BULK OUT to Imaging, packet_len : %d, %s(0x%04x)" % (parent.packet_len, opc, self.code))
             
@@ -459,11 +577,23 @@ class cUSBContainer:
         elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
             print("MTP[0x%08x]GetObjectPropsSupported(0x%04x) data for Format:0x%04x" % (self.transactionID, self.code, interface.child.last_param))
             self.read_get_object_props_supported_data(usb, interface)
-        elif (MTP_OPC_GET_DEVICE_PROP_DESCS == self.code):
-            print("MTP[0x%08x]GetDevicePropDescs(0x%04x) data for DevicePropCode : 0x%04x" % (self.transactionID, self.code, interface.child.last_param))
-            self.read_get_device_props_descs_data(usb, interface)
+        elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
+            print("MTP[0x%08x]GetDevicePropDesc(0x%04x) data for DevicePropCode : 0x%04x" % (self.transactionID, self.code, interface.child.last_param))
+            self.read_get_device_props_desc_data(usb, interface)
+        elif (MTP_OPC_GET_STORAGE_IDS == self.code):
+            print("MTP[0x%08x]GetStorageIDs(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_storage_ids(usb, interface)
+        elif (MTP_OPC_GET_STORAGE_INFO == self.code):
+            print("MTP[0x%08x]GetStorageInfo(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_storage_info(usb, interface)
+        elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
+            print("MTP[0x%08x]GetObjectHandles(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_object_handles(usb, interface)
+        elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
+            print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_object_props_desc(usb, interface)
         else:
-            print("BULK IN from Imaging, packet_len : %d" % parent.packet_len)
+            print("BULK IN from Imaging, packet_len : %d, code : 0x%04x" % (parent.packet_len, self.code))
         return
 
 
@@ -512,11 +642,7 @@ class cUSBPcapHeader:
             if (0x0000 == code):
                 break;
 
-            if (0x0100 <= code):
-                string += "?"
-            else:
-                string += chr(code)
-
+            string += tmp_data.decode('UTF-16')
             string_length -= 1
 
         return string
@@ -568,7 +694,7 @@ class cUSBPcapHeader:
         config.ConfigurationValue = self.bConfigurationValue
         config.mAttributes        = self.bmAttributes
         config.MaxPower           = self.bMaxPower
-        if (remain > bytes_to_go + start_bytes_read):
+        if (remain >= bytes_to_go + start_bytes_read):
             interface = None
             while (bytes_to_go > self.bytes_read - start_bytes_read):
 #               print("Additional Descriptor in Config Descriptor bytes_read : %d, remain : %d" % (self.bytes_read, remain))
