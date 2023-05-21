@@ -140,6 +140,19 @@ MTP_CONTAINER_TYPE_EVENT           = 0x0004
 MTP_RES_OK                         = 0x2001
 MTP_OP_NOT_SUPPORTED               = 0x2005
 
+MTP_DATA_TYPE_UNDEF                = 0x0000
+MTP_DATA_TYPE_INT8                 = 0x0001
+MTP_DATA_TYPE_UINT8                = 0x0002
+MTP_DATA_TYPE_INT16                = 0x0003
+MTP_DATA_TYPE_UINT16               = 0x0004
+MTP_DATA_TYPE_INT32                = 0x0005
+MTP_DATA_TYPE_UINT32               = 0x0006
+MTP_DATA_TYPE_INT64                = 0x0007
+MTP_DATA_TYPE_UINT64               = 0x0008
+MTP_DATA_TYPE_INT128               = 0x0009
+MTP_DATA_TYPE_UINT128              = 0x000A
+MTP_DATA_TYPE_ARRAY                = 0x4000
+MTP_DATA_TYPE_STRING               = 0xFFFF
 
 MTP_OPC_GET_DEVICE_INFO            = 0x1001
 MTP_OPC_OPEN_SESSION               = 0x1002
@@ -173,6 +186,81 @@ OPC_TABLE = {
     MTP_OPC_GET_OBJECT_PROP_LIST       : "GetObjectPropList"
 }
 
+OBJ_FMT_TABLE = {
+    0x3000            : "Undefined Object",
+    0x3001            : "Association",
+    0x3002            : "Script",
+    0x3003            : "Executable",
+    0x3004            : "Text",
+    0x3005            : "HTML",
+    0x3006            : "DPOF",
+    0x3007            : "AIFF",
+    0x3008            : "WAV",
+    0x3009            : "MP3",
+    0x300A            : "AVI",
+    0x300B            : "MPEG",
+    0x300C            : "ASF",
+    0x3800            : "Undefined Image",
+    0x3801            : "EXIF/JPEG",
+    0x3802            : "TIFF/EP",
+    0x3803            : "FlashPix",
+    0x3804            : "BMP",
+    0x3805            : "CIFF",
+    0x3806            : "Reserved",
+    0x3807            : "GIF",
+    0x3808            : "JFIF",
+    0x3809            : "CD",
+    0x380A            : "PICT",
+    0x380B            : "PNG",
+    0x380C            : "Reserved",
+    0x380D            : "TIFF",
+    0x380E            : "TIFF/IT",
+    0x380F            : "JP2",
+    0x3810            : "JPX",
+    0x3811            : "DNG",
+    0x3812            : "HEIF",
+    0xB802            : "Undefined Firmware",
+    0xB881            : "WindowsImageFormat",
+    0xB803            : "WBMP",
+    0xB804            : "JPEG XR",
+    0xB900            : "Undefined Audio",
+    0xB901            : "WMA",
+    0xB902            : "OGG",
+    0xB903            : "ACC",
+    0xB904            : "Audible",
+    0xB906            : "FLAC",
+    0xB907            : "QCELP",
+    0xB908            : "AMR",
+    0xB980            : "Undefined Video",
+    0xB981            : "WMB",
+    0xB982            : "MP4",
+    0xB983            : "MP2",
+    0xB984            : "3GP",
+    0xB985            : "3G2",
+    0xB986            : "AVCHD",
+    0xB987            : "ATSC-TS",
+    0xB988            : "DVB-TS",
+    0xBA00            : "Undefined Collection",
+    0xBA01            : "AbstractMultimediaAlbum",
+    0xBA02            : "AbstractImageAlbum",
+    0xBA03            : "AbstractAudioAlbum",
+    0xBA04            : "AbstractVideoAlbum",
+    0xBA05            : "AbstractAudio&VideoPlayList",
+    0xBA06            : "AbstractContactGroup",
+    0xBA07            : "AbstractMessageFolder",
+    0xBA08            : "AbstractChapteredProduction",
+    0xBA09            : "AbstractAudioPlayList",
+    0xBA0A            : "AbstractVideoPlayList",
+    0xBA0B            : "AbstractMediacast",
+    0xBA10            : "WPL PlayList",
+    0xBA11            : "M3U PlayList",
+    0xBA14            : "PLS PlayList",
+    0xBA80            : "Undefined Document",
+    0xBA81            : "Abstract Document",
+    0xBA82            : "XML Document",
+#/* まだまだ続くが省略 */
+}
+
 
 EOF                       = -1
 
@@ -189,6 +277,18 @@ class cMTP_Object:
         self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
         self.format_code            = 0
         self.props_supported        = []
+
+
+#####################################################
+# USB MTP Object Prop List Element
+#####################################################
+class cMTP_ObjectPropListElement:
+    def __init__(self, parent):
+        self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
+        self.object_handle          = 0
+        self.prop_code              = 0
+        self.data_type              = 0
+        self.value                  = 0
 
 
 #####################################################
@@ -260,6 +360,8 @@ class cUSBInterfaceMTP:
         self.objects                = []
         self.storages               = []
         self.device_props           = []
+        self.object_prop_descs      = []
+        self.object_props           = []
 
 
 #####################################################
@@ -393,13 +495,53 @@ class cUSBContainer:
         self.transactionID = 0
 
 
+    def read_data_with_type(self, data_type, list):
+
+        if (data_type == MTP_DATA_TYPE_STRING):
+            string = self.parent.read_header_string()
+            print("MTP PropList[%d]       data(string) : %s" % (list, string))
+            return 
+        elif (data_type >= MTP_DATA_TYPE_ARRAY):
+            is_array = True
+            data_type = data_type & 0xFF
+        else:
+            is_array = False
+
+        if   ((MTP_DATA_TYPE_INT8  == data_type) or (MTP_DATA_TYPE_UINT8  == data_type)):
+            data_size = 1
+        elif ((MTP_DATA_TYPE_INT16 == data_type) or (MTP_DATA_TYPE_UINT16 == data_type)):
+            data_size = 2
+        elif ((MTP_DATA_TYPE_INT32 == data_type) or (MTP_DATA_TYPE_UINT32 == data_type)):
+            data_size = 4
+        elif ((MTP_DATA_TYPE_INT64 == data_type) or (MTP_DATA_TYPE_UINT64 == data_type)):
+            data_size = 8
+        elif ((MTP_DATA_TYPE_INT128 == data_type) or (MTP_DATA_TYPE_UINT128 == data_type)):
+            data_size = 16
+
+        if (is_array):
+            array_size = self.parent.read_header_element(4)
+            array = []
+            while(array_size > 0):
+                data = self.parent.read_header_element(data_size)
+                print("MTP PropList[%d]       data(array) : 0x%08x" % (list, data))
+                array.append(data)
+                array_size -= 1
+
+            return array
+        else:
+            data = self.parent.read_header_element(data_size)
+            print("MTP PropList[%d]       data(numeric) : 0x%08x" % (list, data))
+            return data
+
+        return 0
+
     def read_get_device_props_desc_data(self, usb, interface):
         parent = self.parent
         mtp = interface.child
         device_prop                     = cMTP_Device_Prop(mtp)
         device_prop.prop_code           = parent.read_header_element(2)
         device_prop.data_type           = parent.read_header_element(2)
-        device_prop.get_set             = parent.read_header_element(2)
+        device_prop.get_set             = parent.read_header_element(1)
         device_prop.factory_default_val = parent.read_header_string()
         device_prop.current_val         = parent.read_header_string()
         device_prop.form_flag           = parent.read_header_element(1)
@@ -407,16 +549,92 @@ class cUSBContainer:
         print("MTP            Data Type           : 0x%04x" % device_prop.data_type)
         print("MTP            Get/Set             : 0x%02x" % device_prop.get_set)
         print("MTP            Factory Default Val : %s" % device_prop.factory_default_val)
-        print("MTP            Prop Code           : %s" % device_prop.current_val)
+        print("MTP            Current Val         : %s" % device_prop.current_val)
         print("MTP            Form Flag           : 0x%02x" % device_prop.form_flag)
         mtp.device_props.append(device_prop)
         return
 
+    def read_get_object_prop_list(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        object_handle    = interface.child.last_param
+        object_prop_code = interface.child.last_param2
+
+        number_of_element = parent.read_header_element(4)
+        list = 0
+        while (list < number_of_element):
+            object_prop = cMTP_ObjectPropListElement(mtp)
+            object_prop.object_handle = parent.read_header_element(4)
+            object_prop.prop_code     = parent.read_header_element(2)
+            object_prop.data_type     = parent.read_header_element(2)
+            print("MTP PropList[%d]       object_handle : 0x%08x" % (list, object_prop.object_handle))
+            print("MTP PropList[%d]       prop_code     : 0x%04x" % (list, object_prop.prop_code))
+            print("MTP PropList[%d]       data_type     : 0x%04x" % (list, object_prop.data_type))
+            self.read_data_with_type(object_prop.data_type, list)
+            mtp.object_props.append(object_prop)
+            list += 1
+        return
+
     def read_get_object_props_desc(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        object_prop_code   = mtp.last_param
+        object_format_code = mtp.last_param2
+
+        object_prop                     = cMTP_Object_Prop(mtp)
+        object_prop.prop_code           = parent.read_header_element(2)
+        object_prop.data_type           = parent.read_header_element(2)
+        object_prop.get_set             = parent.read_header_element(1)
+
+        if (object_prop.data_type   == 0x0002) or (object_prop.data_type == 0x0001):
+            object_prop.default_val         = parent.read_header_element(1)
+        elif (object_prop.data_type == 0x0004) or (object_prop.data_type == 0x0003):
+            object_prop.default_val         = parent.read_header_element(2)
+        elif (object_prop.data_type == 0x0006) or (object_prop.data_type == 0x0005):
+            object_prop.default_val         = parent.read_header_element(4)
+        elif (object_prop.data_type == 0x0008) or (object_prop.data_type == 0x0007):
+            object_prop.default_val         = parent.read_header_element(8)
+        elif (object_prop.data_type == 0x000A) or (object_prop.data_type == 0x0009):
+            object_prop.default_val         = parent.read_header_element(16)
+        elif (object_prop.data_type == 0xFFFF):
+            object_prop.default_val         = parent.read_header_string()
+        elif (object_prop.data_type >= 0x4000):
+            #/* Array型の場合、必ず32bitの0となる */
+            object_prop.default_val         = parent.read_header_element(4)
+        else:
+            object_prop.default_val         = parent.read_header_element(4)
+
+        object_prop.group_code          = parent.read_header_element(4)
+        object_prop.form_flag           = parent.read_header_element(1)
+        if (OBJ_FMT_TABLE.get(object_format_code)):
+            print("MTP Get Object Prop for %s(0x%x)" % (OBJ_FMT_TABLE.get(object_format_code), object_format_code))
+        else:
+            print("MTP Get Object Prop for Unknown Format(0x%x)" % object_format_code)
+
+        print("MTP            Prop Code           : 0x%04x" % object_prop.prop_code)
+        print("MTP            Data Type           : 0x%04x" % object_prop.data_type)
+        print("MTP            Get/Set             : 0x%02x" % object_prop.get_set)
+        if (object_prop.data_type < 0x4000):
+            print("MTP            Default Val         : 0x%02x" % object_prop.default_val)
+        else:
+            print("MTP            Default Val         : %s" % object_prop.default_val)
+        print("MTP            Group Code          : 0x%08x" % object_prop.group_code)
+        print("MTP            Form Flag           : 0x%02x" % object_prop.form_flag)
+        mtp.object_prop_descs.append(object_prop)
         return
 
     def read_get_object_handles(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        handle_num = parent.read_header_element(4)
+        print("MTP            Handle num        : 0x%04x" % handle_num)
+        while (handle_num > 0):
+            handle = parent.read_header_element(4)
+            handle_num -= 1
+            print("MTP            handle            : 0x%08x" % handle)
+
         return
+
 
     def read_get_storage_info(self, usb, interface):
         parent = self.parent
@@ -547,7 +765,16 @@ class cUSBContainer:
             elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
                 object_prop_code   = parent.read_header_element(4)
                 object_format_code = parent.read_header_element(4)
+                interface.child.last_param  = object_prop_code
+                interface.child.last_param2 = object_format_code
                 print("MTP[0x%08x]GetObjectPropsDesc(0x%04x), ObjectPropCode : 0x%04x, ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_prop_code, object_format_code))
+            elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
+                object_handle      = parent.read_header_element(4)
+                object_format_code = parent.read_header_element(4)
+                object_prop_code   = parent.read_header_element(4)
+                interface.child.last_param  = object_handle
+                interface.child.last_param2 = object_prop_code
+                print("MTP[0x%08x]GetObjectPropsList(0x%04x), Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code))
             elif (MTP_OPC_GET_STORAGE_IDS == self.code):
                 print("MTP[0x%08x]GetStorageIDs(0x%04x)" % (self.transactionID, self.code))
             elif (MTP_OPC_GET_STORAGE_INFO == self.code):
@@ -592,6 +819,9 @@ class cUSBContainer:
         elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
             print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) data" % (self.transactionID, self.code))
             self.read_get_object_props_desc(usb, interface)
+        elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
+            print("MTP[0x%08x]GetObjectPropsList(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_object_prop_list(usb, interface)
         else:
             print("BULK IN from Imaging, packet_len : %d, code : 0x%04x" % (parent.packet_len, self.code))
         return
