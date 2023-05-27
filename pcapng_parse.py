@@ -272,11 +272,39 @@ g_sections                = []
 #####################################################
 # USB MTP Object
 #####################################################
-class cMTP_Object:
+class cMTP_Object_Prop_Supported:
     def __init__(self, parent):
         self.parent                 = parent           #cUSBInterfaceMTPクラスへの参照
         self.format_code            = 0
         self.props_supported        = []
+
+
+#####################################################
+# USB MTP Object
+#####################################################
+class cMTP_ObjectInfo:
+    def __init__(self, parent):
+        self.parent                  = parent           #cUSBInterfaceMTPクラスへの参照
+        self.object_handle           = 0
+        self.storage_id              = 0
+        self.object_format           = 0
+        self.protection_status       = 0
+        self.object_compressed_size  = 0
+        self.thumb_format            = 0
+        self.thumb_compressed_size   = 0
+        self.thumb_pix_width         = 0
+        self.thumb_pix_height        = 0
+        self.image_pix_width         = 0
+        self.image_pix_height        = 0
+        self.image_bit_depth         = 0
+        self.parent_object           = 0
+        self.association_type        = 0
+        self.association_description = 0
+        self.sequence_number         = 0
+        self.filename                = ""
+        self.date_created            = ""
+        self.date_modified           = ""
+        self.keywords                = ""
 
 
 #####################################################
@@ -357,11 +385,21 @@ class cUSBInterfaceMTP:
         self.model                  = ""
         self.device_ver             = ""
         self.serial_num             = ""
-        self.objects                = []
+        self.objects_info           = []
         self.storages               = []
         self.device_props           = []
         self.object_prop_descs      = []
         self.object_props           = []
+        self.object_prop_supported  = []
+
+    def get_object_info(self, handle):
+        for object_info in self.objects_info:
+            if (object_inf.object_handle == handle):
+                return object_info
+
+        object_info = cMTP_ObjectInfo(self)
+        object_info.handle = handle
+        return object_info
 
 
 #####################################################
@@ -499,7 +537,7 @@ class cUSBContainer:
 
         if (data_type == MTP_DATA_TYPE_STRING):
             string = self.parent.read_header_string()
-            print("MTP PropList[%d]       data(string) : %s" % (list, string))
+            print("MTP PropList[%d]       data(string)  : %s" % (list, string))
             return 
         elif (data_type >= MTP_DATA_TYPE_ARRAY):
             is_array = True
@@ -523,7 +561,7 @@ class cUSBContainer:
             array = []
             while(array_size > 0):
                 data = self.parent.read_header_element(data_size)
-                print("MTP PropList[%d]       data(array) : 0x%08x" % (list, data))
+                print("MTP PropList[%d]       data(array)   : 0x%08x" % (list, data))
                 array.append(data)
                 array_size -= 1
 
@@ -573,6 +611,49 @@ class cUSBContainer:
             self.read_data_with_type(object_prop.data_type, list)
             mtp.object_props.append(object_prop)
             list += 1
+        return
+
+    def read_get_object_info(self, usb, interface):
+        parent = self.parent
+        mtp = interface.child
+        object_handle   = mtp.last_param
+
+        object_info                         = mtp.get_object_info(object_handle)
+        object_info.storage_id              = parent.read_header_element(4)
+        object_info.object_format           = parent.read_header_element(2)
+        object_info.protection_status       = parent.read_header_element(2)
+        object_info.object_compressed_size  = parent.read_header_element(4)
+        object_info.thumb_format            = parent.read_header_element(2)
+        object_info.thumb_compressed_size   = parent.read_header_element(4)
+        object_info.thumb_pix_width         = parent.read_header_element(4)
+        object_info.thumb_pix_height        = parent.read_header_element(4)
+        object_info.image_pix_width         = parent.read_header_element(4)
+        object_info.image_pix_height        = parent.read_header_element(4)
+        object_info.image_bit_depth         = parent.read_header_element(4)
+        object_info.parent_object           = parent.read_header_element(4)
+        object_info.association_type        = parent.read_header_element(2)
+        object_info.association_description = parent.read_header_element(4)
+        object_info.sequence_number         = parent.read_header_element(4)
+        object_info.filename                = parent.read_header_string()
+        object_info.date_created            = parent.read_header_string()
+        object_info.date_modified           = parent.read_header_string()
+        object_info.keywords                = parent.read_header_string()
+
+        print("MTP Object Info Handle         : 0x%08x" % (object_info.object_handle))
+        print("MTP             StrageID       : 0x%08x" % (object_info.storage_id))
+        print("MTP             Format         : 0x%04x" % (object_info.object_format))
+        print("MTP             Protection     : 0x%04x" % (object_info.protection_status))
+        print("MTP             CompressedSize : 0x%04x" % (object_info.object_compressed_size))
+        print("MTP             ThumbFormat    : 0x%04x, Width : %d, Height : %d" % (object_info.thumb_format, object_info.thumb_pix_width, object_info.thumb_pix_height))
+        print("MTP             BitDepth       : 0x%04x, Width : %d, Height : %d" % (object_info.image_bit_depth, object_info.image_pix_width, object_info.image_pix_height))
+        print("MTP             Parent         : 0x%08x" % (object_info.parent_object))
+        print("MTP             AssociationType: 0x%04x" % (object_info.association_type))
+        print("MTP             AssociationDesc: 0x%08x" % (object_info.association_description))
+        print("MTP             SequenceNumber : 0x%08x" % (object_info.sequence_number))
+        print("MTP             Filename       : %s" % (object_info.filename))
+        print("MTP             DateCreated    : %s" % (object_info.date_created))
+        print("MTP             DateModified   : %s" % (object_info.date_modified))
+        print("MTP             Keywords       : %s" % (object_info.keywords))
         return
 
     def read_get_object_props_desc(self, usb, interface):
@@ -674,7 +755,7 @@ class cUSBContainer:
     def read_get_object_props_supported_data(self, usb, interface):
         parent = self.parent
         mtp = interface.child
-        object = cMTP_Object(mtp)
+        object = cMTP_Object_Prop_Supported(mtp)
         object.format_code = mtp.last_param
 
         list_size            = parent.read_header_element(4)
@@ -684,7 +765,7 @@ class cUSBContainer:
             list_size -= 1
             print("MTP            ObjectProps supported : 0x%04x" % prop)
 
-        mtp.objects.append(object)
+        mtp.object_prop_supported.append(object)
         return
 
     def read_get_device_info_data(self, usb, interface):
@@ -775,6 +856,10 @@ class cUSBContainer:
                 interface.child.last_param  = object_handle
                 interface.child.last_param2 = object_prop_code
                 print("MTP[0x%08x]GetObjectPropsList(0x%04x), Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code))
+            elif (MTP_OPC_GET_OBJECT_INFO == self.code):
+                object_handle      = parent.read_header_element(4)
+                interface.child.last_param  = object_handle
+                print("MTP[0x%08x]GetObjectInfo(0x%04x), Handle:0x%08x" % (self.transactionID, self.code, object_handle))
             elif (MTP_OPC_GET_STORAGE_IDS == self.code):
                 print("MTP[0x%08x]GetStorageIDs(0x%04x)" % (self.transactionID, self.code))
             elif (MTP_OPC_GET_STORAGE_INFO == self.code):
@@ -816,6 +901,9 @@ class cUSBContainer:
         elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
             print("MTP[0x%08x]GetObjectHandles(0x%04x) data" % (self.transactionID, self.code))
             self.read_get_object_handles(usb, interface)
+        elif (MTP_OPC_GET_OBJECT_INFO == self.code):
+            print("MTP[0x%08x]GetObjectInfo(0x%04x) data" % (self.transactionID, self.code))
+            self.read_get_object_info(usb, interface)
         elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
             print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) data" % (self.transactionID, self.code))
             self.read_get_object_props_desc(usb, interface)
