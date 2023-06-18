@@ -882,9 +882,11 @@ class cUSBContainer:
                 object_handle      = parent.read_data_element(4)
                 object_format_code = parent.read_data_element(4)
                 object_prop_code   = parent.read_data_element(4)
+                object_prop_group  = parent.read_data_element(4)
+                object_depth       = parent.read_data_element(4)
                 interface.child.last_param  = object_handle
                 interface.child.last_param2 = object_prop_code
-                print("MTP[0x%08x]GetObjectPropsList(0x%04x), Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code))
+                print("MTP[0x%08x]GetObjectPropsList(0x%04x), Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x GroupCode : 0x%04x, depth : %d" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code, object_prop_group, object_depth))
             elif (MTP_OPC_GET_OBJECT_INFO == self.code):
                 object_handle      = parent.read_data_element(4)
                 interface.child.last_param  = object_handle
@@ -954,7 +956,8 @@ class cUSBContainer:
         parent = self.parent
 
         if (MTP_EVT_DEVICE_PROP_CHANGED == self.code):
-            print("MTP[0x%08x]Event DevicePropChanged(0x%04x) data" % (self.transactionID, self.code))
+            prop_code      = parent.read_data_element(4)
+            print("MTP[0x%08x]Event DevicePropChanged(0x%04x) data, PropCode:0x%04x" % (self.transactionID, self.code, prop_code))
         else:
             if ((self.code >= 0xC000) and (self.code <= 0xC7FF)):
                 print("INTR IN from Imaging, packet_len : %d, VendorExtention RES(0x%04x)" % (parent.usb_packet_len, self.code))
@@ -1156,15 +1159,19 @@ class cUSBPcapHeader:
             if (mtp.hold_in_container != None):
                 container = mtp.hold_in_container
                 container.length_read += self.usb_packet_len;
+                container.parent.packet_data += self.packet_data
                 if (parent.epb_capture_len != parent.epb_packet_len):
                     container.missing = 1
 
                 if (container.length_read >= container.length):
-                    print("hold_in_container complete! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read))
-#                   container.read_mtp_bulk_in(usb, interface)
+                    print("hold_in_container complete! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x) missing? : %d" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read, container.missing))
+                    if (container.missing == 0):
+                        container.read_mtp_bulk_in(usb, interface)
+
                     mtp.hold_in_container = None
-                else:
-                    print("container sequel! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read))
+#               else:
+#                   print("container sequel! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read))
+
             else:
                 container               = cUSBContainer(self)
                 container.length        = self.read_data_element(4)
@@ -1172,6 +1179,7 @@ class cUSBPcapHeader:
                 container.type          = self.read_data_element(2)
                 container.code          = self.read_data_element(2)
                 container.transactionID = self.read_data_element(4)
+                self.container           = container
                 if (parent.epb_capture_len != parent.epb_packet_len):
                     container.missing = 1
 
@@ -1196,6 +1204,7 @@ class cUSBPcapHeader:
             container.code          = self.read_data_element(2)
             container.transactionID = self.read_data_element(4)
             container.read_mtp_intr_in(usb, interface)
+            self.container           = container
         else:
             print("INTR IN from Imaging without data!")
 
