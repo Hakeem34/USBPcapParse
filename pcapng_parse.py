@@ -417,6 +417,7 @@ class cUSBInterfaceMTP:
         self.object_prop_supported  = []
         self.hold_in_container      = None;
         self.hold_out_container     = None;
+        self.req_time_stamp         = 0
 
     def get_object_info(self, handle):
         for object_info in self.objects_info:
@@ -856,113 +857,154 @@ class cUSBContainer:
 
     def read_mtp_bulk_out(self, usb, interface):
         parent = self.parent
+        grandpa = parent.parent
+        mtp = interface.child
+
+        if (0x01 == self.type):
+            mtp.req_time_stamp = (grandpa.time_stamp_h << 32) + grandpa.time_stamp_l
 
         if (OPC_TABLE.get(self.code)):
             opc = OPC_TABLE[self.code]
-            if (MTP_OPC_OPEN_SESSION == self.code):
-                session_id = parent.read_data_element(4)
-                print("MTP[0x%08x]OpenSession(0x%04x), SessionID : 0x%08x" % (self.transactionID, self.code, session_id))
-            elif (MTP_OPC_GET_DEVICE_INFO == self.code):
-                print("MTP[0x%08x]GetDeviceInfo(0x%04x)" % (self.transactionID, self.code))
-            elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
-                device_prop_code = parent.read_data_element(4)
-                interface.child.last_param = device_prop_code
-                print("MTP[0x%08x]GetDevicePropDesc(0x%04x), DevicePropCode : 0x%04x" % (self.transactionID, self.code, device_prop_code))
-            elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
-                object_fc = parent.read_data_element(4)
-                interface.child.last_param = object_fc
-                print("MTP[0x%08x]GetObjectPropsSupported(0x%04x), ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_fc))
-            elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
-                object_prop_code   = parent.read_data_element(4)
-                object_format_code = parent.read_data_element(4)
-                interface.child.last_param  = object_prop_code
-                interface.child.last_param2 = object_format_code
-                print("MTP[0x%08x]GetObjectPropsDesc(0x%04x), ObjectPropCode : 0x%04x, ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_prop_code, object_format_code))
-            elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
-                object_handle      = parent.read_data_element(4)
-                object_format_code = parent.read_data_element(4)
-                object_prop_code   = parent.read_data_element(4)
-                object_prop_group  = parent.read_data_element(4)
-                object_depth       = parent.read_data_element(4)
-                interface.child.last_param  = object_handle
-                interface.child.last_param2 = object_prop_code
-                print("MTP[0x%08x]GetObjectPropsList(0x%04x), Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x GroupCode : 0x%04x, depth : %d" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code, object_prop_group, object_depth))
-            elif (MTP_OPC_GET_OBJECT_INFO == self.code):
-                object_handle      = parent.read_data_element(4)
-                interface.child.last_param  = object_handle
-                print("MTP[0x%08x]GetObjectInfo(0x%04x), Handle:0x%08x" % (self.transactionID, self.code, object_handle))
-            elif (MTP_OPC_GET_STORAGE_IDS == self.code):
-                print("MTP[0x%08x]GetStorageIDs(0x%04x)" % (self.transactionID, self.code))
-            elif (MTP_OPC_GET_STORAGE_INFO == self.code):
-                storage_id = parent.read_data_element(4)
-                interface.child.last_param = storage_id
-                print("MTP[0x%08x]GetStorageInfo(0x%04x) storage_id : %d" % (self.transactionID, self.code, storage_id))
-            elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
-                storage_id         = parent.read_data_element(4)
-                object_format_code = parent.read_data_element(4)
-                handle_association = parent.read_data_element(4)
-                print("MTP[0x%08x]GetObjectHandles(0x%04x) storage_id : 0x%08x, format_code : 0x%04x, handle_association : 0x%08x" % (self.transactionID, self.code, storage_id, object_format_code, handle_association))
+            if (0x01 == self.type):
+                if (MTP_OPC_OPEN_SESSION == self.code):
+                    session_id = parent.read_data_element(4)
+                    print("MTP[0x%08x]OpenSession(0x%04x) REQ, SessionID : 0x%08x" % (self.transactionID, self.code, session_id))
+                elif (MTP_OPC_GET_DEVICE_INFO == self.code):
+                    print("MTP[0x%08x]GetDeviceInfo(0x%04x)" % (self.transactionID, self.code))
+                elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
+                    device_prop_code = parent.read_data_element(4)
+                    interface.child.last_param = device_prop_code
+                    print("MTP[0x%08x]GetDevicePropDesc(0x%04x) REQ, DevicePropCode : 0x%04x" % (self.transactionID, self.code, device_prop_code))
+                elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
+                    object_fc = parent.read_data_element(4)
+                    interface.child.last_param = object_fc
+                    print("MTP[0x%08x]GetObjectPropsSupported(0x%04x) REQ, ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_fc))
+                elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
+                    object_prop_code   = parent.read_data_element(4)
+                    object_format_code = parent.read_data_element(4)
+                    interface.child.last_param  = object_prop_code
+                    interface.child.last_param2 = object_format_code
+                    print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) REQ, ObjectPropCode : 0x%04x, ObjectFormatCode : 0x%04x" % (self.transactionID, self.code, object_prop_code, object_format_code))
+                elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
+                    object_handle      = parent.read_data_element(4)
+                    object_format_code = parent.read_data_element(4)
+                    object_prop_code   = parent.read_data_element(4)
+                    object_prop_group  = parent.read_data_element(4)
+                    object_depth       = parent.read_data_element(4)
+                    interface.child.last_param  = object_handle
+                    interface.child.last_param2 = object_prop_code
+                    print("MTP[0x%08x]GetObjectPropsList(0x%04x) REQ, Handle:0x%08x, FormatCode : 0x%04x, PropCode : 0x%04x GroupCode : 0x%04x, depth : %d" % (self.transactionID, self.code, object_handle, object_format_code, object_prop_code, object_prop_group, object_depth))
+                elif (MTP_OPC_GET_OBJECT_INFO == self.code):
+                    object_handle      = parent.read_data_element(4)
+                    interface.child.last_param  = object_handle
+                    print("MTP[0x%08x]GetObjectInfo(0x%04x) REQ, Handle:0x%08x" % (self.transactionID, self.code, object_handle))
+                elif (MTP_OPC_GET_STORAGE_IDS == self.code):
+                    print("MTP[0x%08x]GetStorageIDs(0x%04x) REQ" % (self.transactionID, self.code))
+                elif (MTP_OPC_GET_STORAGE_INFO == self.code):
+                    storage_id = parent.read_data_element(4)
+                    interface.child.last_param = storage_id
+                    print("MTP[0x%08x]GetStorageInfo(0x%04x) REQ storage_id : %d" % (self.transactionID, self.code, storage_id))
+                elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
+                    storage_id         = parent.read_data_element(4)
+                    object_format_code = parent.read_data_element(4)
+                    handle_association = parent.read_data_element(4)
+                    print("MTP[0x%08x]GetObjectHandles(0x%04x) REQ storage_id : 0x%08x, format_code : 0x%04x, handle_association : 0x%08x" % (self.transactionID, self.code, storage_id, object_format_code, handle_association))
+                elif (MTP_OPC_GET_OBJECT == self.code):
+                    object_handle      = parent.read_data_element(4)
+                    print("MTP[0x%08x]GetObject(0x%04x) REQ, Handle:0x%08x" % (self.transactionID, self.code, object_handle))
+                elif (MTP_OPC_GET_THUMB == self.code):
+                    object_handle      = parent.read_data_element(4)
+                    print("MTP[0x%08x]GetThumb(0x%04x) REQ, Handle:0x%08x" % (self.transactionID, self.code, object_handle))
+                else:
+                    print("BULK OUT to Imaging, packet_len : %d, %s(0x%04x) REQ" % (parent.usb_packet_len, opc, self.code))
+            elif (0x02 == self.type):
+                print("BULK OUT to Imaging, packet_len : %d, %s(0x%04x) DAT" % (parent.usb_packet_len, opc, self.code))
             else:
-                print("BULK OUT to Imaging, packet_len : %d, %s(0x%04x)" % (parent.usb_packet_len, opc, self.code))
-            
+                print("MTP[0x%08x]Strange BulkOut Container:0x%04x, type:%d" % (self.transactionID, self.code, self.type))
         else:
-            if ((self.code >= 0x9000) and (self.code <= 0x97FF)):
-                print("BULK OUT to Imaging, packet_len : %d, VendorExtention OPC(0x%04x)" % (parent.usb_packet_len, self.code))
+            if (0x01 == self.type):
+                if ((self.code >= 0x9000) and (self.code <= 0x97FF)):
+                    print("BULK OUT to Imaging REQ, packet_len : %d, VendorExtention OPC(0x%04x)" % (parent.usb_packet_len, self.code))
+                else:
+                    print("BULK OUT to Imaging REQ, packet_len : %d, UNKNOWN OPC(0x%04x)" % (parent.usb_packet_len, self.code))
+            elif (0x02 == self.type):
+                if ((self.code >= 0x9000) and (self.code <= 0x97FF)):
+                    print("BULK OUT to Imaging DAT, packet_len : %d, VendorExtention OPC(0x%04x)" % (parent.usb_packet_len, self.code))
+                else:
+                    print("BULK OUT to Imaging DAT, packet_len : %d, UNKNOWN OPC(0x%04x)" % (parent.usb_packet_len, self.code))
             else:
-                print("BULK OUT to Imaging, packet_len : %d, UNKNOWN OPC(0x%04x)" % (parent.usb_packet_len, self.code))
+                print("MTP[0x%08x]Strange BulkOut Container:0x%04x, type:%d" % (self.transactionID, self.code, self.type))
         return
 
     def read_mtp_bulk_in(self, usb, interface):
         parent = self.parent
+        grandpa = parent.parent
+        mtp = interface.child
 
-        if (MTP_RES_OK == self.code):
-            print("MTP[0x%08x]Response OK(0x%04x)" % (self.transactionID, self.code))
-        elif (MTP_OPC_GET_DEVICE_INFO == self.code):
-            print("MTP[0x%08x]GetDeviceInfo(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_device_info_data(usb, interface)
-        elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
-            print("MTP[0x%08x]GetObjectPropsSupported(0x%04x) data for Format:0x%04x" % (self.transactionID, self.code, interface.child.last_param))
-            self.read_get_object_props_supported_data(usb, interface)
-        elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
-            print("MTP[0x%08x]GetDevicePropDesc(0x%04x) data for DevicePropCode : 0x%04x" % (self.transactionID, self.code, interface.child.last_param))
-            self.read_get_device_props_desc_data(usb, interface)
-        elif (MTP_OPC_GET_STORAGE_IDS == self.code):
-            print("MTP[0x%08x]GetStorageIDs(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_storage_ids(usb, interface)
-        elif (MTP_OPC_GET_STORAGE_INFO == self.code):
-            print("MTP[0x%08x]GetStorageInfo(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_storage_info(usb, interface)
-        elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
-            print("MTP[0x%08x]GetObjectHandles(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_object_handles(usb, interface)
-        elif (MTP_OPC_GET_OBJECT_INFO == self.code):
-            print("MTP[0x%08x]GetObjectInfo(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_object_info(usb, interface)
-        elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
-            print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_object_props_desc(usb, interface)
-        elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
-            print("MTP[0x%08x]GetObjectPropsList(0x%04x) data" % (self.transactionID, self.code))
-            self.read_get_object_prop_list(usb, interface)
-        else:
-            if ((self.code >= 0xA000) and (self.code <= 0xA7FF)):
-                print("BULK IN from Imaging, packet_len : %d, VendorExtention RES(0x%04x)" % (parent.usb_packet_len, self.code))
+        if (0x03 == self.type):
+            res_time_stamp = (grandpa.time_stamp_h << 32) + grandpa.time_stamp_l
+            res_time = res_time_stamp - mtp.req_time_stamp
+
+        if (0x03 == self.type):
+            if (MTP_RES_OK == self.code):
+                print("MTP[0x%08x]Response OK(0x%04x) Time to Res : %d ms" % (self.transactionID, self.code, res_time))
+            elif ((self.code >= 0xA000) and (self.code <= 0xA7FF)):
+                print("BULK IN from Imaging RES, packet_len : %d, VendorExtention RES(0x%04x) Time to Res : %d ms" % (parent.usb_packet_len, self.code, res_time))
             else:
-                print("BULK IN from Imaging, packet_len : %d, code : 0x%04x" % (parent.usb_packet_len, self.code))
+                print("BULK IN from Imaging RES, packet_len : %d, code : 0x%04x Time to Res : %d ms" % (parent.usb_packet_len, self.code, res_time))
+        elif (0x02 == self.type):
+            if (MTP_OPC_GET_DEVICE_INFO == self.code):
+                print("MTP[0x%08x]GetDeviceInfo(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_device_info_data(usb, interface)
+            elif (MTP_OPC_GET_OBJECT_PROPS_SUPPORTED == self.code):
+                print("MTP[0x%08x]GetObjectPropsSupported(0x%04x) data for Format:0x%04x" % (self.transactionID, self.code, interface.child.last_param))
+                self.read_get_object_props_supported_data(usb, interface)
+            elif (MTP_OPC_GET_DEVICE_PROP_DESC == self.code):
+                print("MTP[0x%08x]GetDevicePropDesc(0x%04x) data for DevicePropCode : 0x%04x" % (self.transactionID, self.code, interface.child.last_param))
+                self.read_get_device_props_desc_data(usb, interface)
+            elif (MTP_OPC_GET_STORAGE_IDS == self.code):
+                print("MTP[0x%08x]GetStorageIDs(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_storage_ids(usb, interface)
+            elif (MTP_OPC_GET_STORAGE_INFO == self.code):
+                print("MTP[0x%08x]GetStorageInfo(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_storage_info(usb, interface)
+            elif (MTP_OPC_GET_OBJECT_HANDLES == self.code):
+                print("MTP[0x%08x]GetObjectHandles(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_object_handles(usb, interface)
+            elif (MTP_OPC_GET_OBJECT_INFO == self.code):
+                print("MTP[0x%08x]GetObjectInfo(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_object_info(usb, interface)
+            elif (MTP_OPC_GET_OBJECT_PROPS_DESC == self.code):
+                print("MTP[0x%08x]GetObjectPropsDesc(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_object_props_desc(usb, interface)
+            elif (MTP_OPC_GET_OBJECT_PROP_LIST == self.code):
+                print("MTP[0x%08x]GetObjectPropsList(0x%04x) data" % (self.transactionID, self.code))
+                self.read_get_object_prop_list(usb, interface)
+            elif (MTP_OPC_GET_OBJECT == self.code):
+                print("MTP[0x%08x]GetObject(0x%04x) data" % (self.transactionID, self.code))
+            elif (MTP_OPC_GET_THUMB == self.code):
+                print("MTP[0x%08x]GetThumb(0x%04x) data" % (self.transactionID, self.code))
+            else:
+                print("BULK IN from Imaging DAT, packet_len : %d, code : 0x%04x" % (parent.usb_packet_len, self.code))
+        else:
+            print("MTP[0x%08x]Strange BulkIn Container:0x%04x, type:%d" % (self.transactionID, self.code, self.type))
         return
 
 
     def read_mtp_intr_in(self, usb, interface):
         parent = self.parent
 
-        if (MTP_EVT_DEVICE_PROP_CHANGED == self.code):
-            prop_code      = parent.read_data_element(4)
-            print("MTP[0x%08x]Event DevicePropChanged(0x%04x) data, PropCode:0x%04x" % (self.transactionID, self.code, prop_code))
-        else:
-            if ((self.code >= 0xC000) and (self.code <= 0xC7FF)):
-                print("INTR IN from Imaging, packet_len : %d, VendorExtention RES(0x%04x)" % (parent.usb_packet_len, self.code))
+        if (0x04 == self.type):
+            if (MTP_EVT_DEVICE_PROP_CHANGED == self.code):
+                prop_code      = parent.read_data_element(4)
+                print("MTP[0x%08x]Event DevicePropChanged(0x%04x) data, PropCode:0x%04x" % (self.transactionID, self.code, prop_code))
             else:
-                print("INTR IN from Imaging, packet_len : %d, code : 0x%04x" % (parent.usb_packet_len, self.code))
+                if ((self.code >= 0xC000) and (self.code <= 0xC7FF)):
+                    print("INTR IN from Imaging, packet_len : %d, VendorExtention EVT(0x%04x)" % (parent.usb_packet_len, self.code))
+                else:
+                    print("INTR IN from Imaging, packet_len : %d, code : 0x%04x" % (parent.usb_packet_len, self.code))
+        else:
+            print("MTP[0x%08x]Strange Interrupt Container:0x%04x, type:%d" % (self.transactionID, self.code, self.type))
 
 
 
@@ -1216,14 +1258,14 @@ class cUSBPcapHeader:
     #/* BULK転送（OUT ENDPに対するHOST→DEVICE） */
     def read_bulk_out_data_to_outep(self, usb):
         interface = usb.get_interface_by_endpoint(self.endpoint)
-        if (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
+        if (interface != None) and (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
             self.read_mtp_bulk_out(usb, interface)
         return
 
     #/* BULK転送（IN ENDPに対するHOST←DEVICE） */
     def read_bulk_in_data_to_inep(self, usb):
         interface = usb.get_interface_by_endpoint(self.endpoint)
-        if (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
+        if (interface != None) and (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
             self.read_mtp_bulk_in(usb, interface)
         return
 
@@ -1256,7 +1298,7 @@ class cUSBPcapHeader:
     #/* インタラプト転送（IN ENDPに対するHOST←DEVICE） */
     def read_intr_in_data_to_inep(self, usb):
         interface = usb.get_interface_by_endpoint(self.endpoint)
-        if (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
+        if (interface != None) and (USB_INTERFACE_CLASS_IMAGE == interface.InterfaceClass):
             self.read_mtp_intr_in(usb, interface)
         return
     #/* インタラプト転送（OUT ENDPに対するHOST←DEVICE） */
@@ -1360,7 +1402,9 @@ class cUSBPcapHeader:
         parent = self.parent
         ts_l = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) % 1000000
         ts_h = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) / 1000000
-        print("read EPB(USBPcap) @ 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%d.%06d)" % (parent.position, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, ts_h, ts_l))
+
+        dt = datetime.datetime.fromtimestamp(parent.time_stamp_sec)
+        print("read EPB(USBPcap) @ 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%s)(%d.%06d)" % (parent.position, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, dt, ts_h, ts_l))
         if (parent.epb_capture_len != parent.epb_packet_len):
             print("  missing packet data!  cap len : %d, pac len : %d" % (parent.epb_capture_len, parent.epb_packet_len))
 
@@ -1470,6 +1514,8 @@ class cEPB:
         self.interface_id    = 0
         self.time_stamp_h    = 0
         self.time_stamp_l    = 0
+        self.time_stamp_sec  = 0
+        self.time_stamp_msec = 0
         self.epb_capture_len = 0
         self.epb_packet_len  = 0
         self.parent          = parent           #cSectionクラスへの参照
@@ -1489,6 +1535,7 @@ class cEPB:
         self.epb_capture_len = int.from_bytes(data_cap_len, byteorder=self.parent.byte_order)
         self.epb_packet_len  = int.from_bytes(data_pac_len, byteorder=self.parent.byte_order)
 
+        self.time_stamp_sec  = ((int.from_bytes(data_ts_h, byteorder=self.parent.byte_order) << 32) + int.from_bytes(data_ts_l, byteorder=self.parent.byte_order)) / 1000000
         if (self.interface_id > len(self.parent.idbs)):
             print("Invalid InterFace ID in EPB  ID : %d" % self.interface_id)
             sys.exit("error")
