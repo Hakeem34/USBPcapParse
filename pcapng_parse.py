@@ -74,6 +74,15 @@ USB_ENDPOINT_ATTR_BULK    = 0x02
 USB_ENDPOINT_ATTR_INTR    = 0x03
 
 
+#/* USBD_STATUS エラー値 */
+#/* 参考：https://www.diskmfr.com/usbd_status-parallel-table-of-usb-status-error-code/ */
+USBD_STATUS_INVALID_URB_FUNCTION = 0x80000200
+USBD_STATUS_INVALID_PARAMETER    = 0x80000300
+USBD_STATUS_STALL_PID            = 0xC0000004
+USBD_STATUS_ENDPOINT_HALTED      = 0xC0000030
+USBD_STATUS_CANCELED             = 0xC0010000
+
+
 #####################################################
 # USBのCTRL転送に関する定義
 #####################################################
@@ -1404,7 +1413,11 @@ class cUSBPcapHeader:
         ts_h = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) / 1000000
 
         dt = datetime.datetime.fromtimestamp(parent.time_stamp_sec)
-        print("read EPB(USBPcap) @ 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%s)(%d.%06d)" % (parent.position, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, dt, ts_h, ts_l))
+        if (self.usbd_st == 0):
+            print("read EPB(USBPcap) @ 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%s)(%d.%06d)" % (parent.position, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, dt, ts_h, ts_l))
+        else:
+            print("read EPB(USBPcap) @ 0x%08x, USBD_STATUS ERROR! 0x%08x, block! length : %3d, Interface : %d, TS[%08x-%08x](%s)(%d.%06d)" % (parent.position, self.usbd_st, parent.total_len, parent.interface_id, parent.time_stamp_h, parent.time_stamp_l, dt, ts_h, ts_l))
+
         if (parent.epb_capture_len != parent.epb_packet_len):
             print("  missing packet data!  cap len : %d, pac len : %d" % (parent.epb_capture_len, parent.epb_packet_len))
 
