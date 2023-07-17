@@ -952,7 +952,7 @@ class cUSBContainer:
 
         if (0x03 == self.type):
             res_time_stamp = (grandpa.time_stamp_h << 32) + grandpa.time_stamp_l
-            res_time = res_time_stamp - mtp.req_time_stamp
+            res_time = (res_time_stamp - mtp.req_time_stamp) / 1000
 
         if (0x03 == self.type):
             if (MTP_RES_OK == self.code):
@@ -1185,20 +1185,39 @@ class cUSBPcapHeader:
 
     def read_mtp_bulk_out(self, usb, interface):
         parent = self.parent
+        mtp = interface.child
         if (self.usb_packet_len > 0):
-            container                = cUSBContainer(self)
-            container.length         = self.read_data_element(4)
-            container.length_read    = self.usb_packet_len;
-            container.type           = self.read_data_element(2)
-            container.code           = self.read_data_element(2)
-            container.transactionID  = self.read_data_element(4)
-            interface.child.last_opc = container.code
-            if (parent.epb_capture_len != parent.epb_packet_len):
-                container.missing = 1
+            if (mtp.hold_out_container != None):
+                container = mtp.hold_out_container
+                container.length_read += self.usb_packet_len;
+                container.parent.packet_data += self.packet_data
+                if (parent.epb_capture_len != parent.epb_packet_len):
+                    container.missing = 1
 
-            self.container           = container
+                if (container.length_read >= container.length):
+                    print("hold_out_container complete! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x) missing? : %d" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read, container.missing))
+                    if (container.missing == 0):
+                        container.read_mtp_bulk_out(usb, interface)
 
-            container.read_mtp_bulk_out(usb, interface)
+                    mtp.hold_out_container = None
+
+            else:
+                container                = cUSBContainer(self)
+                container.length         = self.read_data_element(4)
+                container.length_read    = self.usb_packet_len;
+                container.type           = self.read_data_element(2)
+                container.code           = self.read_data_element(2)
+                container.transactionID  = self.read_data_element(4)
+                interface.child.last_opc = container.code
+                self.container           = container
+                if (parent.epb_capture_len != parent.epb_packet_len):
+                    container.missing = 1
+
+                if (container.length > self.usb_packet_len):
+                    print("out container length over packet len! hold this container! packet:%d(0x%x), container:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length))
+                    mtp.hold_out_container = container
+                else:
+                    container.read_mtp_bulk_out(usb, interface)
         else:
             print("BULK OUT to Imaging without data!")
 
@@ -1220,8 +1239,6 @@ class cUSBPcapHeader:
                         container.read_mtp_bulk_in(usb, interface)
 
                     mtp.hold_in_container = None
-#               else:
-#                   print("container sequel! packet:%d(0x%x), container:%d(0x%x), length_read:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length, container.length_read, container.length_read))
 
             else:
                 container               = cUSBContainer(self)
@@ -1234,9 +1251,8 @@ class cUSBPcapHeader:
                 if (parent.epb_capture_len != parent.epb_packet_len):
                     container.missing = 1
 
-
                 if (container.length > self.usb_packet_len):
-                    print("container length over packet len! hold this container! packet:%d(0x%x), container:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length))
+                    print("in container length over packet len! hold this container! packet:%d(0x%x), container:%d(0x%x)" % (self.usb_packet_len, self.usb_packet_len, container.length, container.length))
                     mtp.hold_in_container = container
                 else:
                     container.read_mtp_bulk_in(usb, interface)
