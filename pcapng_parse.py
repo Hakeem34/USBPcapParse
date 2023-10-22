@@ -1,8 +1,14 @@
 import os
 import sys
 import re
+import time
 import datetime
 import subprocess
+
+
+g_target_paths = []
+g_target_addrs = []
+g_option_stdout = 0
 
 
 #####################################################
@@ -296,9 +302,9 @@ OBJ_FMT_TABLE = {
 
 
 EOF                       = -1
-
-
 g_sections                = []
+
+
 
 
 
@@ -1038,6 +1044,7 @@ class cUSBPcapHeader:
         self.container      = None
         self.packet_offset  = 0
         self.packet_data    = []
+        self.is_target      = 1
 
     def read_data_element(self, size):
         parent = self.parent
@@ -1347,6 +1354,8 @@ class cUSBPcapHeader:
         self.usb_packet_len = self.read_header_element(USBPCAP_PACKET_LEN_SIZE)
         if (self.trans_type == USB_TRANS_TYPE_CTRL):
             self.ctrl_stage = self.read_data_element(USBPCAP_CTRL_STAGE_SIZE)
+
+        self.is_target = is_address_match(self.dev_addr)
         return
 
     def read_packet(self, remain):
@@ -1361,57 +1370,57 @@ class cUSBPcapHeader:
             self.bytes_read  += self.usb_packet_len
 
         usb = grandpa.get_usb_device(self.bus_id, self.dev_addr)
-        last = usb.get_last_packet()
+        if (self.is_target):
+            last = usb.get_last_packet()
 
-        if (self.trans_type == USB_TRANS_TYPE_CTRL):
-            if (self.irp_info == 0):
-                # Host → Deviceの場合は、bmRequestType、bRequestを読み出す
-                self.mRequestType = self.read_data_element(USBPCAP_CTRL_BMREQ_SIZE)
-                self.Request      = self.read_data_element(USBPCAP_CTRL_REQ_SIZE)
+            if (self.trans_type == USB_TRANS_TYPE_CTRL):
+                if (self.irp_info == 0):
+                    # Host → Deviceの場合は、bmRequestType、bRequestを読み出す
+                    self.mRequestType = self.read_data_element(USBPCAP_CTRL_BMREQ_SIZE)
+                    self.Request      = self.read_data_element(USBPCAP_CTRL_REQ_SIZE)
 
-                if (self.is_standard_get_request_type(self.mRequestType)):
-                    if (USB_CTRL_REQ_GET_DESC == self.Request):
-                        self.DescIndex = self.read_data_element(1)
-                        self.DescType  = self.read_data_element(1)
-                    if (USB_CTRL_REQ_GET_ST == self.Request):
-                        self.Value  = self.read_data_element(2)
-                        self.Index  = self.read_data_element(2)
-                        self.Length = self.read_data_element(2)
+                    if (self.is_standard_get_request_type(self.mRequestType)):
+                        if (USB_CTRL_REQ_GET_DESC == self.Request):
+                            self.DescIndex = self.read_data_element(1)
+                            self.DescType  = self.read_data_element(1)
+                        if (USB_CTRL_REQ_GET_ST == self.Request):
+                            self.Value  = self.read_data_element(2)
+                            self.Index  = self.read_data_element(2)
+                            self.Length = self.read_data_element(2)
 
-                elif (self.is_standard_set_request_type(self.mRequestType)):
-                    if (USB_CTRL_REQ_SET_CFG == self.Request):
-                        self.ConfigValue = self.read_data_element(1)
-                        usb.set_config = self.ConfigValue
-            else:
-                if (last.trans_type == USB_TRANS_TYPE_CTRL):
-                    if (last.is_standard_get_request_type(last.mRequestType)):
-                        if (USB_CTRL_REQ_GET_DESC == last.Request):
-                            self.read_get_desc_res(remain, usb, last)
-                        elif (USB_CTRL_REQ_GET_ST == last.Request):
-                            self.Status  = self.read_data_element(2)
-        elif (self.trans_type == USB_TRANS_TYPE_BULK):
-            if (self.irp_info == 0):
-                if (self.endpoint & 0x80):
-                    self.read_bulk_out_data_to_inep(usb)
+                    elif (self.is_standard_set_request_type(self.mRequestType)):
+                        if (USB_CTRL_REQ_SET_CFG == self.Request):
+                            self.ConfigValue = self.read_data_element(1)
+                            usb.set_config = self.ConfigValue
                 else:
-                    self.read_bulk_out_data_to_outep(usb)
-            else:
-                if (self.endpoint & 0x80):
-                    self.read_bulk_in_data_to_inep(usb)
+                    if (last.trans_type == USB_TRANS_TYPE_CTRL):
+                        if (last.is_standard_get_request_type(last.mRequestType)):
+                            if (USB_CTRL_REQ_GET_DESC == last.Request):
+                                self.read_get_desc_res(remain, usb, last)
+                            elif (USB_CTRL_REQ_GET_ST == last.Request):
+                                self.Status  = self.read_data_element(2)
+            elif (self.trans_type == USB_TRANS_TYPE_BULK):
+                if (self.irp_info == 0):
+                    if (self.endpoint & 0x80):
+                        self.read_bulk_out_data_to_inep(usb)
+                    else:
+                        self.read_bulk_out_data_to_outep(usb)
                 else:
-                    self.read_bulk_in_data_to_outep(usb)
-        elif (self.trans_type == USB_TRANS_TYPE_INTR):
-            if (self.irp_info == 0):
-                if (self.endpoint & 0x80):
-                    self.read_intr_out_data_to_inep(usb)
+                    if (self.endpoint & 0x80):
+                        self.read_bulk_in_data_to_inep(usb)
+                    else:
+                        self.read_bulk_in_data_to_outep(usb)
+            elif (self.trans_type == USB_TRANS_TYPE_INTR):
+                if (self.irp_info == 0):
+                    if (self.endpoint & 0x80):
+                        self.read_intr_out_data_to_inep(usb)
+                    else:
+                        self.read_intr_out_data_to_outep(usb)
                 else:
-                    self.read_intr_out_data_to_outep(usb)
-            else:
-                if (self.endpoint & 0x80):
-                    self.read_intr_in_data_to_inep(usb)
-                else:
-                    self.read_intr_in_data_to_outep(usb)
-            
+                    if (self.endpoint & 0x80):
+                        self.read_intr_in_data_to_inep(usb)
+                    else:
+                        self.read_intr_in_data_to_outep(usb)
 
         if (remain < self.bytes_read):
             print("Invalid block read @0x%08x, packet_len:%d, remain:%d, self.bytes_read:%d" % (self.parent.parent.file.tell(), self.usb_packet_len, remain, self.bytes_read))
@@ -1424,6 +1433,9 @@ class cUSBPcapHeader:
         return
 
     def disp_packet(self):
+        if (self.is_target == 0):
+            return
+
         parent = self.parent
         ts_l = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) % 1000000
         ts_h = (((parent.time_stamp_h << 32) + parent.time_stamp_l) - parent.parent.first_ts) / 1000000
@@ -1718,12 +1730,47 @@ class cSection:
 
 
 #####################################################
+# 処理開始時間計測
+#####################################################
+def parse_start():
+    start_time = time.perf_counter()
+    now = datetime.datetime.now()
+    print("start parse : " + str(now))
+    return start_time
+
+
+#####################################################
+# 処理終了時間計測
+#####################################################
+def parse_end(start_time):
+    end_time = time.perf_counter()
+    now = datetime.datetime.now()
+    print("end parse : " + str(now))
+    second = int(end_time - start_time)
+    msec   = ((end_time - start_time) - second) * 1000
+    minute = second / 60
+    second = second % 60
+    print("  %dmin %dsec %dmsec" % (minute, second, msec))
+    return
+
+
+#####################################################
 # pcapngファイル解析
 #####################################################
 def parse_file(file_path):
     global g_sections
+    global g_option_stdout
 
     f = open(file_path, 'rb')
+
+    if (g_option_stdout == 0):
+        #/* 標準出力オプションでなければ、対象ファイル名に.txtを付与して出力 */
+        log_path = file_path + '.txt'
+        log_file = open(log_path, "a")
+        sys.stdout = log_file
+
+    start_time = parse_start()
+
     data = f.read(BLOCK_TYPE_SIZE)
     block_type = int.from_bytes(data, byteorder='little')
     print("block_type : 0x%08x" % block_type)
@@ -1737,6 +1784,7 @@ def parse_file(file_path):
                 block_type = section.read_next_block_type()
                 if (EOF == block_type):
                     f.close()
+                    parse_end(start_time)
                     return
                 elif (BLOCK_TYPE_SHB == block_type):
                     print("new SHB @ 0x%08x" % position)
@@ -1747,6 +1795,7 @@ def parse_file(file_path):
     else:
        print("Invalid first block type! block type : 0x%08x" % block_type)
 
+    parse_end(start_time)
     f.close()
     return
 
@@ -1782,27 +1831,68 @@ def check_usb_devices(section):
 
 
 #/*****************************************************************************/
-#/* メイン関数                                                                */
+#/* アドレスフィルタチェック                                                  */
 #/*****************************************************************************/
-def main():
-    global g_sections
+def is_address_match(addr):
+    global g_target_addrs
+
+    if not g_target_addrs:
+        return 1
+
+    for check in g_target_addrs:
+        if (check == addr):
+            return 1
+
+    return 0
+
+#/*****************************************************************************/
+#/* コマンドライン引数処理                                                    */
+#/*****************************************************************************/
+def check_command_line_option():
+    global g_target_paths
+    global g_target_addrs
+    global g_option_stdout
 
     argc = len(sys.argv)
+    option = ""
+
     if (argc == 1):
         print("usage : pcapng_parse.py [target]")
         sys.exit(0)
 
     sys.argv.pop(0)
     for arg in sys.argv:
-        if (os.path.isfile(arg)):
-            parse_file(arg)
+        if (option == "a"):
+            g_target_addrs.append(int(arg))
+            option = ""
+        elif (arg == "-a") or (arg == "--address"):
+            option = "a"
+        elif (arg == "-s") or (arg == "--stdout"):
+            g_option_stdout = 1
+        elif (os.path.isfile(arg)):
+            g_target_paths.append(arg)
         else:
-            print("%s is not valid file!" % arg)
+            print("invalid arg : %s" % arg)
 
+    return
+
+
+#/*****************************************************************************/
+#/* メイン関数                                                                */
+#/*****************************************************************************/
+def main():
+    global g_sections
+    global g_target_paths
+
+    check_command_line_option()
+
+    for path in g_target_paths:
+        parse_file(path)
 
     for section in g_sections:
         check_usb_devices(section)
 
+    return
 
 if __name__ == "__main__":
     main()
