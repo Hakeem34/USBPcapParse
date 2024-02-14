@@ -146,6 +146,11 @@ MIN_ENDPOINT_DESC_SIZE    = 7
 #####################################################
 # MTPに関する定義
 #####################################################
+MTP_CLASS_REQ_CANCEL               = 0x64
+MTP_CLASS_REQ_GET_EX_EVT_DATA      = 0x65
+MTP_CLASS_REQ_DEVICE_RESET         = 0x66
+MTP_CLASS_REQ_GET_DEVICE_STATUS    = 0x67
+
 MTP_CONTAINER_TYPE_UNKNOWN         = 0x0000
 MTP_CONTAINER_TYPE_COMMAND         = 0x0001
 MTP_CONTAINER_TYPE_DATA            = 0x0002
@@ -185,6 +190,7 @@ MTP_OPC_GET_OBJECT_PROP_LIST       = 0x9805
 
 MTP_RES_OK                         = 0x2001
 MTP_RES_OP_NOT_SUPPORTED           = 0x2005
+MTP_RES_TRANSACTION_CANCELED       = 0x201F
 
 MTP_EVT_CANCEL_TRANSACTION         = 0x4001
 MTP_EVT_OBJECT_ADDED               = 0x4002
@@ -1024,6 +1030,8 @@ class cUSBContainer:
             if (MTP_EVT_DEVICE_PROP_CHANGED == self.code):
                 prop_code      = parent.read_data_element(4)
                 print("MTP[0x%08x]Event DevicePropChanged(0x%04x) data, PropCode:0x%04x" % (self.transactionID, self.code, prop_code))
+            elif (MTP_EVT_CANCEL_TRANSACTION == self.code):
+                print("MTP[0x%08x]Event CancelTransaction(0x%04x) data" % (self.transactionID, self.code))
             else:
                 if ((self.code >= 0xC000) and (self.code <= 0xC7FF)):
                     print("INTR IN from Imaging, packet_len : %d, VendorExtention EVT(0x%04x)" % (parent.usb_packet_len, self.code))
@@ -1088,6 +1096,9 @@ class cUSBPcapHeader:
 
         return string
 
+    def read_ascii_string(self, buffer_len):
+        
+        return
 
     def read_header_element(self, size):
         parent = self.parent
@@ -1095,6 +1106,8 @@ class cUSBPcapHeader:
 
         tmp_data = grandpa.file.read(size)
         self.bytes_read += size
+
+#       self.dump_with_time_stamp(tmp_data, size, 0)
         return int.from_bytes(tmp_data, byteorder=grandpa.byte_order)
 
     def read_desc_header(self, last):
@@ -1169,6 +1182,7 @@ class cUSBPcapHeader:
                     mAttributes       = self.read_data_element(1)
                     MaxPacketSize     = self.read_data_element(2)
                     Interval          = self.read_data_element(1)
+                    print("EP Addr:0x%02x, Attr:0x%02x, PacketSize:0x%04x, Interval:0x%02x" % (EndpointAddress, mAttributes, MaxPacketSize, Interval))
 
                     desc_remain = DescLength - MIN_ENDPOINT_DESC_SIZE
                     while (desc_remain > 0):
@@ -1329,6 +1343,20 @@ class cUSBPcapHeader:
 
         return False
 
+    def is_class_get_request_type(self, mRequestType):
+        if ((USB_CTRL_REQTYP_BIT_DIRRECTION & mRequestType) == USB_CTRL_REQTYP_BIT_DEVICE_TO_HOST):
+            if ((USB_CTRL_REQTYP_BIT_REQ_TYPE & mRequestType) == USB_CTRL_REQTYP_BIT_CLASS_REQ):
+                return True
+
+        return False
+
+    def is_class_set_request_type(self, mRequestType):
+        if ((USB_CTRL_REQTYP_BIT_DIRRECTION & mRequestType) == USB_CTRL_REQTYP_BIT_HOST_TO_DEVICE):
+            if ((USB_CTRL_REQTYP_BIT_REQ_TYPE & mRequestType) == USB_CTRL_REQTYP_BIT_CLASS_REQ):
+                return True
+
+        return False
+
 
 
     #/* インタラプト転送（IN ENDPに対するHOST→DEVICE） */
@@ -1372,12 +1400,11 @@ class cUSBPcapHeader:
         parent = self.parent
         grandpa = parent.parent
 
-        if (remain < self.usb_packet_len):
-            self.packet_data  = grandpa.file.read(remain - self.header_length)
-            self.bytes_read  += (remain - self.header_length)
-        else:
-            self.packet_data  = grandpa.file.read(self.usb_packet_len)
-            self.bytes_read  += self.usb_packet_len
+        # usb_packet_lenは無視して、EPBとして残りのデータを一括で読み出す
+        self.packet_data  = grandpa.file.read(remain - self.header_length)
+        self.bytes_read  += (remain - self.header_length)
+#       if ((remain - self.header_length) >=80):
+#           self.dump_with_time_stamp(self.packet_data, 78, 1)
 
         usb = grandpa.get_usb_device(self.bus_id, self.dev_addr)
         if (self.is_target):
@@ -1402,6 +1429,17 @@ class cUSBPcapHeader:
                         if (USB_CTRL_REQ_SET_CFG == self.Request):
                             self.ConfigValue = self.read_data_element(1)
                             usb.set_config = self.ConfigValue
+                    elif (self.is_class_get_request_type(self.mRequestType)):
+                        if (MTP_CLASS_REQ_GET_DEVICE_STATUS == self.Request):
+                            print("MTP GET DEVICE STATUS(0x%x)" % self.Request)
+                        else:
+                            print("class request get 0x%x" % self.Request)
+                    elif (self.is_class_set_request_type(self.mRequestType)):
+                        if (MTP_CLASS_REQ_CANCEL == self.Request):
+                            print("MTP CANCEL REQUEST(0x%x)" % self.Request)
+                        else:
+                            print("class request set 0x%x" % self.Request)
+                        pass
                 else:
                     if (last.trans_type == USB_TRANS_TYPE_CTRL):
                         if (last.is_standard_get_request_type(last.mRequestType)):
@@ -1409,6 +1447,13 @@ class cUSBPcapHeader:
                                 self.read_get_desc_res(remain, usb, last)
                             elif (USB_CTRL_REQ_GET_ST == last.Request):
                                 self.Status  = self.read_data_element(2)
+                        elif (last.is_class_get_request_type(last.mRequestType)):
+                            if (MTP_CLASS_REQ_GET_DEVICE_STATUS == last.Request):
+                                length  = self.read_data_element(2)
+                                status  = self.read_data_element(2)
+                                print("MTP GET DEVICE STATUS(0x%x) length:%d, status:0x%04x" % (last.Request, length, status))
+                            else:
+                                print("class request get 0x%x" % last.Request)
             elif (self.trans_type == USB_TRANS_TYPE_BULK):
                 if (self.irp_info == 0):
                     if (self.endpoint & 0x80):
@@ -1448,6 +1493,56 @@ class cUSBPcapHeader:
         dt = datetime.datetime.fromtimestamp(parent.time_stamp_sec)
         time_stamp = '[%s] ' % dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         print(time_stamp + text)
+        return
+
+    def dump_with_time_stamp(self, data, length, and_so_on):
+        parent = self.parent
+
+        if (length == 0):
+            return
+
+        if (length > 0x10000):
+            length = 0x10000
+            and_so_on = 1
+
+
+        dt = datetime.datetime.fromtimestamp(parent.time_stamp_sec)
+        time_stamp = '[%s] ' % dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+        if (length > 32):
+            print(time_stamp + "------------ 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F ------------")
+
+        text = ""
+        offset = 0
+        while (length >= 32):
+            text  = 'OFFSET[%04x] %02x %02x %02x %02x %02x %02x %02x %02x' % (offset, data[offset + 0], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7])
+            offset += 8
+            text += ' %02x %02x %02x %02x %02x %02x %02x %02x' % (data[offset + 0], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7])
+            offset += 8
+            text += ' %02x %02x %02x %02x %02x %02x %02x %02x' % (data[offset + 0], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7])
+            offset += 8
+            text += ' %02x %02x %02x %02x %02x %02x %02x %02x' % (data[offset + 0], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7])
+            offset += 8
+            length -= 32
+            print(time_stamp + text)
+
+        if (length > 0):
+            text = 'OFFSET[%04x] ' % offset
+            while (length >= 8):
+                text  += '%02x %02x %02x %02x %02x %02x %02x %02x ' % (data[offset + 0], data[offset + 1], data[offset + 2], data[offset + 3], data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7])
+                offset += 8
+                length -= 8
+
+            while (length > 0):
+                text  += '%02x ' % (data[offset])
+                offset += 1
+                length -= 1
+
+            print(time_stamp + text)
+
+        if (and_so_on):
+            print(time_stamp + '... ... ...')
+
         return
 
     def disp_packet(self):
